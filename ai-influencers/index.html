@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Humans Roster</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #1b1b1e; --muted: #5f5f66; --line: #e3e1dc; --chip: #f0eee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #121214; --card: #1c1c20; --ink: #f2f2f0; --muted: #a3a3ab; --line: #2e2e34; --chip: #26262b; }
+  }
+  :root[data-theme="dark"] { --bg: #121214; --card: #1c1c20; --ink: #f2f2f0; --muted: #a3a3ab; --line: #2e2e34; --chip: #26262b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header, main { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 40px; padding-bottom: 8px; }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .note { margin-top: 12px; font-size: 13px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; padding: 24px 0 48px; }
+  @media (max-width: 380px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .top { display: flex; gap: 14px; padding: 16px; align-items: center; border-top: 5px solid var(--accent); }
+  .top svg { flex: none; border-radius: 50%; }
+  .niche { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .name { font-weight: 650; font-size: 18px; }
+  .handle { color: var(--muted); font-size: 13px; }
+  .body { padding: 0 16px 16px; display: grid; gap: 10px; }
+  .bio { margin: 0; padding: 10px 12px; background: var(--chip); border-radius: 8px; font-size: 14px; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { background: var(--chip); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+  .swatches { display: flex; gap: 4px; }
+  .swatches i { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); }
+  details { border-top: 1px solid var(--line); padding-top: 8px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin-bottom: 4px; }
+  .post { border-left: 3px solid var(--accent); padding-left: 10px; margin-top: 8px; font-size: 14px; }
+  .post b { display: block; }
+  .tags { color: var(--muted); font-size: 12px; }
+  code { font-size: 12px; white-space: pre-wrap; display: block; background: var(--chip); padding: 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Humans — 10 Virtual Influencers</h1>
+  <p>One fictional AI persona for each of the biggest Facebook &amp; Instagram creator niches, with identity, look, voice, content plan, sample posts, monetization and guardrails.</p>
+  <div class="note">Every persona is AI-generated and disclosed as such: “AI” in the bio, Meta’s <em>AI info</em> label and <strong>#AIgenerated</strong> on every post, plus <strong>#ad</strong>/Paid Partnership on sponsored content.</div>
+</header>
+<main><div class="grid" id="grid"></div></main>
+<script src="personas.js"></script>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const initials = (name) => name.replace(/'[^']*'/g, "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
+  const avatar = (p) => {
+    const [a, b] = p.visual.palette;
+    return `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+      <defs><linearGradient id="g-${p.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
+      <circle cx="32" cy="32" r="32" fill="url(#g-${p.id})"/>
+      <text x="32" y="39" text-anchor="middle" font-size="22" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="2" paint-order="stroke" font-family="system-ui">${esc(initials(p.name))}</text></svg>`;
+  };
+  const chips = (arr) => `<div class="chips">${arr.map((x) => `<span>${esc(x)}</span>`).join("")}</div>`;
+  const list = (arr) => `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+
+  document.getElementById("grid").innerHTML = window.PERSONAS.map((p) => `
+    <article class="card" style="--accent:${p.visual.palette[0]}">
+      <div class="top">${avatar(p)}<div>
+        <div class="niche">${esc(p.niche)}</div>
+        <div class="name">${esc(p.name)}, ${p.age}</div>
+        <div class="handle">${esc(p.handle)} · ${esc(p.location)}</div>
+      </div></div>
+      <div class="body">
+        <p class="bio">${esc(p.bio)}</p>
+        <div><div class="label">Personality</div>${chips(p.personality)}</div>
+        <div><div class="label">Content pillars</div>${chips(p.pillars)}</div>
+        <div><div class="label">Palette</div><div class="swatches">${p.visual.palette.map((c) => `<i style="background:${c}" title="${c}"></i>`).join("")}</div></div>
+        <details><summary>Story &amp; voice</summary>
+          <p><em>“${esc(p.tagline)}”</em></p><p>${esc(p.backstory)}</p><p><b>Voice:</b> ${esc(p.voice)}</p>
+          <p><b>Audience:</b> ${esc(p.audience.primary)} — ${esc(p.audience.interests.join(", "))}</p>
+        </details>
+        <details><summary>Look &amp; image prompt</summary>
+          <p>${esc(p.visual.signatureLook)}</p><p><b>Settings:</b> ${esc(p.visual.settings.join("; "))}</p>
+          <div class="label">Prompt</div><code>${esc(p.visual.imagePrompt)}</code>
+          <div class="label" style="margin-top:6px">Negative prompt</div><code>${esc(p.visual.negativePrompt)}</code>
+        </details>
+        <details><summary>Posting plan &amp; sample posts</summary>
+          <p><b>Instagram:</b> ${esc(p.cadence.instagram)}<br><b>Facebook:</b> ${esc(p.cadence.facebook)}</p>
+          <p><b>Format mix:</b> ${Object.entries(p.formats).filter(([, v]) => v).map(([k, v]) => `${esc(k)} ${v}%`).join(" · ")}</p>
+          ${p.samplePosts.map((s) => `<div class="post"><b>${esc(s.type)}: ${esc(s.hook)}</b>${esc(s.caption)}<div class="tags">${esc(s.hashtags.join(" "))}</div></div>`).join("")}
+        </details>
+        <details><summary>Monetization &amp; guardrails</summary>
+          <div class="label" style="margin-top:6px">Revenue</div>${list(p.monetization)}
+          <div class="label">Brand fits</div>${list(p.brandCategories)}
+          <div class="label">Guardrails</div>${list(p.guardrails)}
+        </details>
+      </div>
+    </article>`).join("");
+</script>
+</body>
+</html>
