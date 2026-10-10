@@ -35,6 +35,7 @@ for (const p of PERSONAS) {
   }
   for (const c of p.visual.palette) if (!/^#[0-9A-Fa-f]{6}$/.test(c)) fail(p, `bad color ${c}`);
   if (!p.guardrails.length) fail(p, "needs guardrails");
+  if (p.image && !require("fs").existsSync(require("path").join(__dirname, p.image))) fail(p, `image not found: ${p.image}`);
 }
 
 if (errors.length) {

@@ -56,6 +56,7 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const initials = (name) => name.replace(/'[^']*'/g, "").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("");
   const avatar = (p) => {
+    if (p.image) return `<img src="${esc(p.image)}" width="64" height="64" alt="${esc(p.name)}" style="border-radius:50%;object-fit:cover;flex:none">`;
     const [a, b] = p.visual.palette;
     return `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
       <defs><linearGradient id="g-${p.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>

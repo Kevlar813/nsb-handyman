@@ -12,6 +12,8 @@
   const PERSONAS = [
     {
       id: "fitness",
+      image: "images/fitness.jpg",
+      canvaMediaId: "MAHXkS0vedE",
       niche: "Fitness & Wellness",
       name: "Maya Brooks",
       handle: "@maya.moves.ai",
@@ -65,6 +67,8 @@
     },
     {
       id: "beauty",
+      image: "images/beauty.jpg",
+      canvaMediaId: "MAHXkfE_sAo",
       niche: "Beauty & Makeup",
       name: "Lena Park",
       handle: "@lenaglow.ai",
@@ -118,6 +122,8 @@
     },
     {
       id: "fashion",
+      image: "images/fashion.jpg",
+      canvaMediaId: "MAHXkdd4QMY",
       niche: "Fashion & Style",
       name: "Isabella Moreau",
       handle: "@isa.wears.ai",
@@ -167,6 +173,8 @@
     },
     {
       id: "food",
+      image: "images/food.jpg",
+      canvaMediaId: "MAHXkcaaKCo",
       niche: "Food & Cooking",
       name: "Marco Bellini",
       handle: "@marcocooks.ai",
