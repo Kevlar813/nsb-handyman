@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // How long (ms) to wait after your last words before sending a spoken question.
+  // A pause shorter than this joins the next phrase onto the same question.
+  const FINISH_MS = 900;
+</script>
 <title>Knowledge Galaxy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -60,6 +65,29 @@
   #send:disabled { opacity: .5; cursor: default; }
   #reset { background: rgba(255,255,255,.08); color: var(--muted); }
   #reset:hover { color: var(--text); }
+  .icon-btn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%;
+    background: rgba(255,255,255,.08); color: var(--muted); cursor: pointer; position: relative; }
+  .icon-btn:hover { color: var(--text); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+  #mic.on { background: rgba(92, 242, 181, .18); color: #5cf2b5; }
+  #mic.on::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #5cf2b5; animation: ring 1.6s ease-out infinite; }
+  #mute.muted { color: var(--warn); }
+  @keyframes ring { from { opacity: .8; transform: scale(.9); } to { opacity: 0; transform: scale(1.35); } }
+
+  #status { display: flex; align-items: center; gap: 8px; margin: 0 0 8px 14px; font-size: 12px; color: var(--muted); min-height: 18px; user-select: none; }
+  #status .led { width: 8px; height: 8px; border-radius: 50%; background: #56607f; flex: none; transition: background .2s, box-shadow .2s; }
+  #status[data-state="listening"] .led, #status[data-state="hearing"] .led { background: #5cf2b5; box-shadow: 0 0 10px #5cf2b5; }
+  #status[data-state="hearing"] .led { animation: blink .5s ease-in-out infinite alternate; }
+  #status[data-state="thinking"] .led { background: #ffd166; box-shadow: 0 0 10px #ffd166; animation: blink .7s ease-in-out infinite alternate; }
+  #status[data-state="speaking"] .led { background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: blink .35s ease-in-out infinite alternate; }
+  #status[data-state="speaking"] { color: var(--text); cursor: pointer; }
+  #status[data-state="warn"] { color: var(--warn); }
+  #status[data-state="warn"] .led { background: var(--warn); }
+  #status .heard { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #finish { height: 2px; width: 0; background: #5cf2b5; border-radius: 2px; margin: -4px 22px 6px; opacity: 0; transition: opacity .2s; }
+  #finish.run { opacity: .9; }
+  @keyframes blink { from { opacity: 1; } to { opacity: .35; } }
   .thinking { display: inline-block; width: 1em; text-align: left; }
   .thinking::after { content: '…'; animation: dots 1.2s steps(4) infinite; overflow: hidden; display: inline-block; vertical-align: bottom; width: 0; }
   @keyframes dots { to { width: 1.2em; } }
@@ -114,8 +142,16 @@
     <div class="a" id="a-text"></div>
     <div class="sources" id="a-sources"></div>
   </div>
+  <div id="status" data-state="idle" role="status" aria-live="polite"><span class="led"></span><span class="label">Ready</span><span class="heard"></span></div>
+  <div id="finish"></div>
   <form id="bar" class="glass">
     <input id="q" autocomplete="off" placeholder="Ask your notes anything…" aria-label="Ask a question">
+    <button type="button" class="icon-btn" id="mute" title="Mute spoken answers" aria-label="Mute spoken answers" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="cross" d="m16 9 6 6m0-6-6 6" style="display:none"/></svg>
+    </button>
+    <button type="button" class="icon-btn" id="mic" title="Speak a question" aria-label="Speak a question" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+    </button>
     <button type="button" class="btn" id="reset" title="Start a new conversation">New chat</button>
     <button type="submit" class="btn" id="send">Ask</button>
   </form>
@@ -344,9 +380,11 @@ groups.forEach(g => {
 });
 
 // ---------- chat ----------
-let session = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, '');
+const newSession = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, '');
+let session = newSession();
 const form = document.getElementById('bar'), input = document.getElementById('q'), send = document.getElementById('send');
 const answerBox = document.getElementById('answer');
+let thinking = false, askCtl = null, askSeq = 0;
 
 function showAnswer(q, text, ids, isError) {
   document.getElementById('a-q').textContent = q;
@@ -359,39 +397,363 @@ function showAnswer(q, text, ids, isError) {
   answerBox.classList.add('show');
 }
 
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  const q = input.value.trim();
+// One path for typed and spoken questions.
+async function ask(q) {
+  q = q.trim();
   if (!q) return;
-  input.value = ''; send.disabled = true;
+  stopSpeaking();
+  if (askCtl) askCtl.abort();
+  const ctl = askCtl = new AbortController(), seq = ++askSeq;
+  thinking = true; send.disabled = true; renderStatus();
   showAnswer(q, null, []);
   try {
     const res = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, session }) });
+      body: JSON.stringify({ question: q, session }), signal: ctl.signal });
     const data = await res.json();
+    if (seq !== askSeq) return;
     if (data.session) session = data.session;
     const ids = (data.nodes || []).filter(i => Number.isInteger(i) && nodes[i]);
-    showAnswer(q, data.answer || 'No answer returned.', ids, !!data.error);
+    const answer = data.answer || 'No answer returned.';
+    showAnswer(q, answer, ids, !!data.error);
     answerSet = new Set(ids);
     focusId = null; panel.classList.remove('open');
     lit = new Set(ids); applyHighlight();
     if (ids.length) { pauseRotation(12000); Graph.zoomToFit(1600, 120, n => answerSet.has(n.id)); }
+    thinking = false;
+    speak(answer);
   } catch (err) {
-    showAnswer(q, `Could not reach the server: ${err.message}`, [], true);
+    if (err.name === 'AbortError' || seq !== askSeq) return;
+    const msg = `Could not reach the server: ${err.message}`;
+    showAnswer(q, msg, [], true);
+    thinking = false;
+    speak(msg);
   } finally {
-    send.disabled = false; input.focus();
+    if (seq === askSeq) { thinking = false; askCtl = null; send.disabled = false; renderStatus(); if (!ear.on) input.focus(); }
   }
+}
+
+function cancelAsk() {
+  if (!askCtl) return;
+  askCtl.abort(); askCtl = null; askSeq++;
+  thinking = false; send.disabled = false;
+  document.getElementById('a-text').textContent = 'Stopped.';
+}
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const q = input.value;
+  input.value = '';
+  clearHeard();
+  ask(q);
 });
 
 document.getElementById('reset').addEventListener('click', async () => {
+  stopSpeaking(); cancelAsk(); clearHeard();
   try { await fetch('/chat/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session }) }); } catch {}
-  session = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, '');
+  session = newSession();
   answerSet = new Set(); answerBox.classList.remove('show'); clearFocus();
   Graph.zoomToFit(1400, 60);
+  renderStatus();
 });
 
+// ---------- status line ----------
+const statusEl = document.getElementById('status');
+const finishBar = document.getElementById('finish');
+let flash = null;   // brief one-off message, e.g. "Stopped"
+
+function renderStatus() {
+  let state, label;
+  const heard = ear.on ? [...ear.buffer, ear.interim].filter(Boolean).join(' ') : '';
+  if (flash && performance.now() < flash.until) { state = flash.state; label = flash.text; }
+  else if (voice.speaking) { state = 'speaking'; label = ear.on ? 'Speaking — say “stop” or click here to interrupt' : 'Speaking — click here or press Esc to stop'; }
+  else if (thinking) { state = 'thinking'; label = 'Thinking…'; }
+  else if (ear.on && ear.interim) { state = 'hearing'; label = 'Listening — hearing you:'; }
+  else if (ear.on && ear.buffer.length) { state = 'hearing'; label = 'Listening — got it, waiting in case you’re not done:'; }
+  else if (ear.on) { state = 'listening'; label = 'Listening — your turn'; }
+  else if (ear.blocked) { state = 'warn'; label = ear.blocked; }
+  else {
+    state = 'idle';
+    label = Recognition ? 'Ready — type, or click the mic to talk' : 'Ready — type a question (voice input needs Chrome, Edge or Safari)';
+    if (synth && !voice.unlocked && !voice.muted) label += ' · voice switches on at your first click';
+  }
+  statusEl.dataset.state = state;
+  statusEl.querySelector('.label').textContent = label;
+  statusEl.querySelector('.heard').textContent = (state === 'hearing') ? heard : '';
+}
+function flashStatus(text, state = 'listening', ms = 1400) {
+  flash = { text, state, until: performance.now() + ms };
+  renderStatus();
+  setTimeout(renderStatus, ms + 20);
+}
+statusEl.addEventListener('click', () => { if (voice.speaking) { stopSpeaking(); flashStatus('Stopped', ear.on ? 'listening' : 'idle'); } });
+
+// ---------- voice out: speechSynthesis ----------
+const synth = window.speechSynthesis || null;
+const GREETING = 'Voice on. Ask me anything about your notes.';
+const voice = { unlocked: false, muted: false, chosen: null, pending: null, speaking: false, gen: 0,
+                utterances: [], current: '', recent: '', recentUntil: 0 };
+try { voice.muted = localStorage.getItem('galaxy.muted') === '1'; } catch {}
+
+function pickVoice() {
+  const all = synth ? synth.getVoices() : [];
+  if (!all.length) return null;
+  const score = v => {
+    const lang = (v.lang || '').toLowerCase().replace('_', '-');
+    let s = lang === 'en-gb' ? 100 : lang.startsWith('en') ? 10 : 0;
+    if (/natural|neural|online|premium|enhanced/i.test(v.name)) s += 8;
+    if (/google uk english|sonia|libby|ryan|maisie|thomas|daniel|serena|kate|arthur|martha/i.test(v.name)) s += 5;
+    return s;
+  };
+  return [...all].sort((a, b) => score(b) - score(a))[0];
+}
+if (synth) {
+  voice.chosen = pickVoice();
+  const onVoices = () => { voice.chosen = pickVoice(); };
+  if (synth.addEventListener) synth.addEventListener('voiceschanged', onVoices); else synth.onvoiceschanged = onVoices;
+}
+
+function splitSentences(text) {
+  const parts = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [text];
+  const out = [];
+  for (const p of parts.map(x => x.trim()).filter(Boolean)) {
+    if (out.length && out[out.length - 1].length < 40) out[out.length - 1] += ' ' + p; else out.push(p);
+  }
+  return out;
+}
+
+function speak(text) {
+  if (!synth || voice.muted || !text) return;
+  if (!voice.unlocked) { voice.pending = text; renderStatus(); return; }   // played on the first click
+  stopSpeaking();
+  const gen = voice.gen, chunks = splitSentences(text);
+  let started = false;
+  voice.speaking = true;
+  // Keep references: Chrome can garbage-collect utterances mid-speech and never fire onend.
+  voice.utterances = chunks.map((chunk, i) => {
+    const u = new SpeechSynthesisUtterance(chunk);
+    if (voice.chosen) { u.voice = voice.chosen; u.lang = voice.chosen.lang; } else u.lang = 'en-GB';
+    u.onstart = () => { if (gen !== voice.gen) return; started = true; voice.current = chunk; renderStatus(); };
+    u.onend = () => {
+      if (gen !== voice.gen) return;
+      rememberSpoken(chunk);
+      if (i === chunks.length - 1) { voice.speaking = false; voice.current = ''; renderStatus(); }
+    };
+    u.onerror = e => {
+      if (gen !== voice.gen) return;
+      voice.speaking = false; voice.current = '';
+      if (e.error === 'not-allowed') { voice.unlocked = false; voice.pending = text; }   // retry on next click
+      renderStatus();
+    };
+    return u;
+  });
+  voice.utterances.forEach(u => synth.speak(u));
+  renderStatus();
+  // If the engine never starts (no voices installed), don't leave the status stuck on "speaking".
+  setTimeout(() => { if (gen === voice.gen && !started && !synth.speaking && !synth.pending) { voice.speaking = false; renderStatus(); } }, 4000);
+}
+
+function stopSpeaking() {
+  voice.gen++;
+  if (synth && (voice.speaking || synth.speaking || synth.pending)) synth.cancel();
+  if (voice.current) rememberSpoken(voice.current);
+  voice.speaking = false; voice.current = ''; voice.utterances = [];
+  renderStatus();
+}
+
+function rememberSpoken(chunk) {
+  voice.recent = (voice.recent + ' ' + chunk).slice(-600);
+  voice.recentUntil = performance.now() + 2500;
+}
+
+// Browsers refuse speech until the page has had a user gesture, so the first line is spoken
+// synchronously inside the first click or key press — never before it.
+function unlockVoice() {
+  if (voice.unlocked || !synth) return;
+  voice.unlocked = true;
+  const first = voice.pending || GREETING;
+  voice.pending = null;
+  speak(first);
+}
+['pointerdown', 'keydown', 'touchend'].forEach(t => addEventListener(t, unlockVoice, { capture: true }));
+
+const muteBtn = document.getElementById('mute');
+function renderMute() {
+  muteBtn.classList.toggle('muted', voice.muted);
+  muteBtn.setAttribute('aria-pressed', String(voice.muted));
+  muteBtn.title = voice.muted ? 'Unmute spoken answers' : 'Mute spoken answers';
+  muteBtn.querySelector('.wave').style.display = voice.muted ? 'none' : '';
+  muteBtn.querySelector('.cross').style.display = voice.muted ? '' : 'none';
+}
+if (!synth) { muteBtn.disabled = true; muteBtn.title = 'This browser cannot speak'; }
+muteBtn.addEventListener('click', () => {
+  voice.muted = !voice.muted;
+  if (voice.muted) stopSpeaking();
+  try { localStorage.setItem('galaxy.muted', voice.muted ? '1' : '0'); } catch {}
+  renderMute(); renderStatus();
+});
+renderMute();
+addEventListener('keydown', e => { if (e.key === 'Escape' && voice.speaking) stopSpeaking(); });
+
+// ---------- voice in: SpeechRecognition ----------
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const INTERRUPT_WORDS = ['stop', 'wait', 'cancel', 'hold on', 'pause', 'be quiet'];
+const ear = { on: false, rec: null, buffer: [], interim: '', timer: null, handledFinal: -1,
+              interruptFired: new Set(), blocked: '', restarts: [], ownsInput: false };
+const micBtn = document.getElementById('mic');
+
+const normalise = t => t.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, ' ').replace(/\s+/g, ' ').trim();
+const wordsOf = t => normalise(t).split(' ').filter(Boolean);
+
+function leadingInterrupt(text) {
+  const n = normalise(text);
+  return INTERRUPT_WORDS.find(w => n === w || n.startsWith(w + ' ')) || null;
+}
+function stripInterrupts(text) {
+  let t = text.trim(), w;
+  while ((w = leadingInterrupt(t))) {
+    const re = new RegExp('^\\W*' + w.split(' ').join('\\W+') + '\\b\\W*', 'i');
+    t = t.replace(re, '').trim();
+  }
+  return t;
+}
+
+// The machine's own voice can leak into the mic. Ignore phrases made of words it just said.
+function spokenRecently() {
+  return voice.current + ' ' + (voice.speaking || performance.now() < voice.recentUntil ? voice.recent : '');
+}
+function isEcho(text) {
+  if (!voice.speaking && performance.now() >= voice.recentUntil) return false;
+  const heard = wordsOf(text);
+  if (!heard.length) return false;
+  const said = new Set(wordsOf(spokenRecently()));
+  return heard.filter(w => said.has(w)).length / heard.length >= 0.6;
+}
+
+function fireInterrupt(word) {
+  // "stop" inside the sentence being spoken is probably our own voice, not you.
+  if (voice.speaking && wordsOf(voice.current).join(' ').includes(word)) return false;
+  stopSpeaking();
+  cancelAsk();
+  clearHeard();
+  flashStatus(`“${word}” — stopped. Listening.`, 'listening');
+  return true;
+}
+
+function clearHeard() {
+  clearTimeout(ear.timer); ear.timer = null;
+  ear.buffer = []; ear.interim = '';
+  finishBar.classList.remove('run');
+  if (ear.ownsInput) { input.value = ''; ear.ownsInput = false; }
+}
+
+function restartFinishTimer() {
+  clearTimeout(ear.timer);
+  ear.timer = setTimeout(onFinishTimer, FINISH_MS);
+  finishBar.style.transition = 'none'; finishBar.style.width = 'calc(100% - 44px)';
+  finishBar.classList.add('run');
+  void finishBar.offsetWidth;
+  finishBar.style.transition = `width ${FINISH_MS}ms linear, opacity .2s`; finishBar.style.width = '0';
+}
+
+function onFinishTimer() {
+  ear.timer = null;
+  if (ear.interim) return;            // you're mid-phrase; its final result restarts the timer
+  const q = ear.buffer.join(' ').replace(/\s+/g, ' ').trim();
+  clearHeard();
+  if (q) ask(q);
+}
+
+// While you speak, the input box shows the running transcript (it never clobbers typing otherwise).
+function showHeard() {
+  const heard = [...ear.buffer, ear.interim].filter(Boolean).join(' ');
+  if (heard) { input.value = heard; ear.ownsInput = true; }
+  else if (ear.ownsInput) { input.value = ''; ear.ownsInput = false; }
+  renderStatus();
+}
+
+function onFinal(text, index) {
+  let t = text.trim();
+  if (leadingInterrupt(t)) {
+    if (!ear.interruptFired.has(index)) { ear.interruptFired.add(index); fireInterrupt(leadingInterrupt(t)); }
+    t = stripInterrupts(t);          // "wait, what about the fence" keeps "what about the fence"
+  }
+  if (!t || isEcho(t)) return;
+  if (voice.speaking) stopSpeaking(); // you talked over it: your turn
+  ear.buffer.push(t);
+  restartFinishTimer();
+}
+
+function onResult(e) {
+  let interim = '';
+  for (let i = e.resultIndex; i < e.results.length; i++) {
+    const r = e.results[i], text = r[0].transcript;
+    if (r.isFinal) {
+      if (i > ear.handledFinal) { ear.handledFinal = i; onFinal(text, i); }
+    } else {
+      const w = leadingInterrupt(text);
+      if (w && !ear.interruptFired.has(i)) { ear.interruptFired.add(i); fireInterrupt(w); }   // instant, no buffer
+      interim += ' ' + (ear.interruptFired.has(i) ? stripInterrupts(text) : text);
+    }
+  }
+  interim = interim.trim();
+  ear.interim = interim && !isEcho(interim) ? interim : '';
+  if (ear.interim && ear.buffer.length) restartFinishTimer();   // more speech arriving: hold the send
+  showHeard();
+}
+
+function startRecognition() {
+  const rec = new Recognition();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  rec.lang = navigator.language || 'en-GB';
+  rec.onresult = onResult;
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      ear.blocked = 'Microphone blocked — allow it from the icon in the address bar, then click the mic again';
+      setMic(false);
+    } else if (e.error === 'audio-capture') {
+      ear.blocked = 'No microphone found'; setMic(false);
+    } else if (e.error === 'network') {
+      ear.blocked = 'Speech recognition needs an internet connection'; setMic(false);
+    }  // 'no-speech' and 'aborted' just end the session; onend restarts it
+  };
+  rec.onend = () => {
+    if (ear.rec !== rec) return;
+    // A phrase that never got a final result still counts.
+    if (ear.interim) { ear.buffer.push(ear.interim); ear.interim = ''; restartFinishTimer(); }
+    ear.handledFinal = -1; ear.interruptFired.clear();
+    if (!ear.on) { ear.rec = null; renderStatus(); return; }
+    const now = performance.now();
+    ear.restarts = ear.restarts.filter(t => now - t < 10000).concat(now);
+    if (ear.restarts.length > 6) { ear.blocked = 'Speech recognition keeps stopping — click the mic to try again'; setMic(false); return; }
+    try { rec.start(); } catch { setTimeout(() => { if (ear.on && ear.rec === rec) try { rec.start(); } catch {} }, 250); }
+  };
+  ear.rec = rec;
+  ear.handledFinal = -1; ear.interruptFired.clear();
+  rec.start();
+}
+
+function setMic(on) {
+  ear.on = on;
+  micBtn.classList.toggle('on', on);
+  micBtn.setAttribute('aria-pressed', String(on));
+  micBtn.title = on ? 'Stop listening' : 'Speak a question';
+  if (on) {
+    ear.blocked = ''; ear.restarts = [];
+    try { startRecognition(); } catch (err) { ear.blocked = `Could not start the microphone: ${err.message}`; setMic(false); return; }
+  } else if (ear.rec) {
+    try { ear.rec.stop(); } catch {}   // onend flushes anything you already said
+  }
+  renderStatus();
+}
+
+if (!Recognition) { micBtn.disabled = true; micBtn.title = 'Voice input needs Chrome, Edge or Safari'; }
+micBtn.addEventListener('click', () => { if (Recognition) setMic(!ear.on); });
+renderStatus();
+
 setTimeout(() => { const l = document.getElementById('loading'); l.style.opacity = 0; setTimeout(() => l.remove(), 900); }, 600);
-window.__galaxy = { Graph, nodes, focusNode };
+window.__galaxy = { Graph, nodes, focusNode, voice, ear };
 </script>
 </body>
 </html>
