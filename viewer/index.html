@@ -11,6 +11,10 @@
   const CLUSTER_MIN = 4;
   // Spoken answers stop after this many sentences; the full answer and the note stay on screen.
   const SPOKEN_MAX_SENTENCES = 2;
+  // Screen frames: Claude reads up to 2576 px on the long edge / ~3.75 MP at full detail.
+  const MAX_FRAME_EDGE = 2576;
+  const MAX_FRAME_PIXELS = 3750000;
+  const FRAME_JPEG_QUALITY = 0.85;
 </script>
 <title>Knowledge Galaxy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -96,6 +100,24 @@
   #finish { height: 2px; width: 0; background: #5cf2b5; border-radius: 2px; margin: -4px 22px 6px; opacity: 0; transition: opacity .2s; }
   #finish.run { opacity: .9; }
   @keyframes blink { from { opacity: 1; } to { opacity: .35; } }
+
+  /* Sight: impossible to miss while a screen share is live. */
+  #eye-frame { position: fixed; inset: 0; pointer-events: none; z-index: 20; display: none;
+    box-shadow: inset 0 0 0 4px #ff3b4e, inset 0 0 40px rgba(255, 59, 78, .45); animation: eyeglow 2s ease-in-out infinite alternate; }
+  #eye-banner { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 21; display: none;
+    align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 999px; background: #c8102e; color: #fff;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em; box-shadow: 0 0 24px rgba(255, 59, 78, .7); white-space: nowrap; }
+  #eye-banner .rec { width: 10px; height: 10px; border-radius: 50%; background: #fff; animation: blink .8s ease-in-out infinite alternate; }
+  #eye-banner button { border: 0; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer;
+    background: #fff; color: #c8102e; font-weight: 700; }
+  body.seeing #eye-frame { display: block; }
+  body.seeing #eye-banner { display: flex; }
+  #screen.on { background: #c8102e; color: #fff; }
+  @keyframes eyeglow { from { opacity: .75; } to { opacity: 1; } }
+  #eye-video { position: fixed; width: 2px; height: 2px; opacity: 0; pointer-events: none; left: 0; top: 0; }
+  #a-frame { display: none; margin-top: 10px; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
+  #a-frame.show { display: flex; }
+  #a-frame img { max-height: 72px; max-width: 128px; border-radius: 6px; border: 1px solid #ff3b4e; }
   .thinking { display: inline-block; width: 1em; text-align: left; }
   .thinking::after { content: '…'; animation: dots 1.2s steps(4) infinite; overflow: hidden; display: inline-block; vertical-align: bottom; width: 0; }
   @keyframes dots { to { width: 1.2em; } }
@@ -111,6 +133,7 @@
     #panel { left: 16px; right: 16px; width: auto; top: auto; bottom: 90px; max-height: 45vh; transform: translateY(calc(100% + 120px)); }
     #panel.open { transform: none; }
     #reset { display: none; }
+    #eye-banner { left: 8px; right: 8px; transform: none; justify-content: space-between; white-space: normal; }
   }
 </style>
 <script type="importmap">
@@ -126,6 +149,9 @@
 </head>
 <body>
 <div id="graph"></div>
+<div id="eye-frame" aria-hidden="true"></div>
+<div id="eye-banner" role="alert"><span class="rec"></span><span>SCREEN SHARED · I can see your screen</span><button type="button" id="eye-stop">Stop sharing</button></div>
+<video id="eye-video" muted playsinline></video>
 <div id="loading">Assembling galaxy</div>
 
 <div id="hud" class="glass">
@@ -150,6 +176,7 @@
     <div class="q" id="a-q"></div>
     <div class="a" id="a-text"></div>
     <div class="sources" id="a-sources"></div>
+    <div id="a-frame"><img alt="The exact screen frame that was sent"><span></span></div>
   </div>
   <div id="status" data-state="idle" role="status" aria-live="polite"><span class="led"></span><span class="label">Ready</span><span class="heard"></span></div>
   <div id="finish"></div>
@@ -157,6 +184,9 @@
     <input id="q" autocomplete="off" placeholder="Ask your notes anything…" aria-label="Ask a question">
     <button type="button" class="icon-btn" id="mute" title="Mute spoken answers" aria-label="Mute spoken answers" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="cross" d="m16 9 6 6m0-6-6 6" style="display:none"/></svg>
+    </button>
+    <button type="button" class="icon-btn" id="screen" title="Share your screen so I can see it" aria-label="Share your screen" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
     </button>
     <button type="button" class="icon-btn" id="mic" title="Speak a question" aria-label="Speak a question" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
@@ -404,6 +434,7 @@ function showAnswer(q, text, ids, isError) {
   answerBox.classList.toggle('error', !!isError);
   const src = document.getElementById('a-sources'); src.replaceChildren();
   (ids || []).forEach(i => nodes[i] && src.append(chip(nodes[i])));
+  showFrameUsed(null);
   answerBox.classList.add('show');
 }
 
@@ -411,26 +442,44 @@ function showAnswer(q, text, ids, isError) {
 async function ask(q) {
   q = q.trim();
   if (!q) return;
+  const askedAt = Date.now();
   stopSpeaking();
   if (askCtl) askCtl.abort();
   const ctl = askCtl = new AbortController(), seq = ++askSeq;
-  thinking = true; send.disabled = true; renderStatus();
+  // While a share is live, every question is about the screen. Otherwise a question that is
+  // plainly about the screen gets told there is nothing to see; it never goes to the notes.
+  const viaScreen = shareLive();
+  if (!viaScreen && looksLikeScreenQuestion(q)) {
+    askCtl = null;
+    const msg = eye.endedAt ? SHARE_ENDED_LINE : 'I can\u2019t see your screen at the moment. Click the screen button to share it, then ask again.';
+    showAnswer(q, msg, [], true); speak(msg); return;
+  }
+  thinking = viaScreen ? 'screen' : true; send.disabled = true; renderStatus();
   showAnswer(q, null, []);
   try {
-    const res = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, session }), signal: ctl.signal });
+    let shot = null, body = { question: q, session };
+    if (viaScreen) {
+      shot = await captureFrame(askedAt);   // a brand-new frame, taken now, never a stored one
+      if (seq !== askSeq) return;
+      body.frame = shot.frame;
+    }
+    const res = await fetch(viaScreen ? '/see' : '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: ctl.signal });
     const data = await res.json();
     if (seq !== askSeq) return;
     if (data.session) session = data.session;
     const ids = (data.nodes || []).filter(i => Number.isInteger(i) && nodes[i]);
     const answer = data.answer || 'No answer returned.';
     showAnswer(q, answer, ids, !!data.error);
+    if (shot) showFrameUsed(shot, data.frame_used);
     proveAnswer(data.about_notes === true, ids);
     thinking = false;
     speak(spokenVersion(answer));
   } catch (err) {
     if (err.name === 'AbortError' || seq !== askSeq) return;
-    const msg = `Could not reach the server: ${err.message}`;   // graph holds still on errors
+    const msg = err.name === 'ShareEnded' ? SHARE_ENDED_LINE
+      : err.name === 'FrameError' ? `I couldn\u2019t capture your screen: ${err.message}`
+      : `Could not reach the server: ${err.message}`;   // graph holds still on errors
     showAnswer(q, msg, [], true);
     thinking = false;
     speak(msg);
@@ -512,7 +561,7 @@ function renderStatus() {
   const heard = ear.on ? [...ear.buffer, ear.interim].filter(Boolean).join(' ') : '';
   if (flash && performance.now() < flash.until) { state = flash.state; label = flash.text; }
   else if (voice.speaking) { state = 'speaking'; label = ear.on ? 'Speaking — say “stop” or click here to interrupt' : 'Speaking — click here or press Esc to stop'; }
-  else if (thinking) { state = 'thinking'; label = 'Thinking…'; }
+  else if (thinking) { state = 'thinking'; label = thinking === 'screen' ? 'Looking at your screen…' : 'Thinking…'; }
   else if (ear.on && ear.interim) { state = 'hearing'; label = 'Listening — hearing you:'; }
   else if (ear.on && ear.buffer.length) { state = 'hearing'; label = 'Listening — got it, waiting in case you’re not done:'; }
   else if (ear.on) { state = 'listening'; label = 'Listening — your turn'; }
@@ -796,6 +845,113 @@ if (!Recognition) { micBtn.disabled = true; micBtn.title = 'Voice input needs Ch
 micBtn.addEventListener('click', () => { if (Recognition) setMic(!ear.on); });
 renderStatus();
 
+// ---------- sight: screen share ----------
+// The stream is held while you share; nothing else is. A frame is drawn onto a brand-new canvas
+// only at the moment you ask, encoded as JPEG, checked to really be JPEG, and sent with the
+// media type the browser actually produced. No frame is ever kept for a later question.
+const SHARE_ENDED_LINE = 'The screen share has ended, so I can’t see your screen. Click the screen button to share it again.';
+const eye = { stream: null, track: null, endedAt: 0, video: document.getElementById('eye-video'), thumbUrl: null };
+const screenBtn = document.getElementById('screen');
+const baseTitle = document.title;
+
+const shareLive = () => !!(eye.track && eye.track.readyState === 'live' && eye.stream && eye.stream.active);
+const looksLikeScreenQuestion = q => /\b(my|the|on|this) screen\b|\blooking at\b|\bcan you see\b|\bdo you see\b|\bwhat do you (think|make) of this\b|\bthis (page|window|tab|image|picture|photo|chart|graph|email|doc(ument)?|spreadsheet|code|slide|design|site|website|layout)\b/i.test(q);
+const namedError = (name, message) => Object.assign(new Error(message), { name });
+
+function renderEye() {
+  const live = shareLive();
+  document.body.classList.toggle('seeing', live);
+  screenBtn.classList.toggle('on', live);
+  screenBtn.setAttribute('aria-pressed', String(live));
+  screenBtn.title = live ? 'Stop sharing your screen' : 'Share your screen so I can see it';
+  document.title = live ? '● Sharing screen — ' + baseTitle : baseTitle;
+}
+
+async function startShare() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    flashStatus('Screen sharing isn’t available in this browser', 'warn', 3500); return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 5, max: 15 } }, audio: false });
+    const track = stream.getVideoTracks()[0];
+    if (!track) { stream.getTracks().forEach(t => t.stop()); return; }
+    eye.stream = stream; eye.track = track; eye.endedAt = 0;
+    track.addEventListener('ended', () => shareEnded());       // "Stop sharing" in the browser's own bar
+    stream.addEventListener('inactive', () => shareEnded());
+    eye.video.srcObject = stream;
+    await eye.video.play();
+    renderEye();
+    flashStatus('Screen shared — ask me about what you see', 'warn', 2500);
+  } catch (err) {
+    flashStatus(err.name === 'NotAllowedError' ? 'Screen share cancelled' : `Couldn’t start screen share: ${err.message}`, 'idle', 2500);
+  }
+}
+
+function stopShare() {
+  if (eye.stream) eye.stream.getTracks().forEach(t => t.stop());   // stop() fires no 'ended' event,
+  shareEnded();                                                      // so announce it ourselves
+}
+
+function shareEnded() {
+  if (!eye.stream) return;
+  eye.stream = null; eye.track = null; eye.endedAt = Date.now();
+  eye.video.pause(); eye.video.srcObject = null;
+  renderEye();
+  const line = 'The screen share has ended. I can no longer see your screen.';
+  flashStatus(line, 'warn', 4000);
+  // A question already past capture keeps going: its frame was taken while the share was live.
+  if (thinking !== 'screen') speak(line);
+}
+
+async function captureFrame(askedAt) {
+  if (!shareLive()) throw namedError('ShareEnded', 'share ended');
+  const v = eye.video;
+  // Wait for a frame the browser delivers after you asked. A static screen may not deliver one,
+  // and then the track's current frame already is the live image; cap the wait at one second.
+  if (v.requestVideoFrameCallback) {
+    await new Promise(res => { const t = setTimeout(res, 1000); v.requestVideoFrameCallback(() => { clearTimeout(t); res(); }); });
+  }
+  if (!shareLive()) throw namedError('ShareEnded', 'share ended');
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) throw namedError('FrameError', 'the shared screen hasn’t produced an image yet');
+  const scale = Math.min(1, MAX_FRAME_EDGE / Math.max(vw, vh), Math.sqrt(MAX_FRAME_PIXELS / (vw * vh)));
+  const w = Math.round(vw * scale), h = Math.round(vh * scale);
+  const canvas = document.createElement('canvas');                  // fresh every time
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(v, 0, 0, w, h);
+  const capturedAt = Date.now();
+  let quality = FRAME_JPEG_QUALITY, blob;
+  do {
+    blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+    quality -= 0.15;
+  } while (blob && blob.size > 4.5 * 1024 * 1024 && quality >= 0.4);
+  // Browsers silently fall back to PNG for types they can't encode. Check what we actually got.
+  if (!blob) throw namedError('FrameError', 'the browser could not encode the frame');
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const isJpeg = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
+  if (blob.type !== 'image/jpeg' || !isJpeg) throw namedError('FrameError', `the browser produced ${blob.type || 'an unknown type'}, not JPEG`);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { blob, frame: { media_type: blob.type, data: btoa(bin), width: w, height: h, asked_at: askedAt, captured_at: capturedAt } };
+}
+
+// Under a screen answer, show the exact frame that was sent, so you can check what it saw.
+function showFrameUsed(shot, info) {
+  const box = document.getElementById('a-frame');
+  if (eye.thumbUrl) { URL.revokeObjectURL(eye.thumbUrl); eye.thumbUrl = null; }
+  if (!shot) { box.classList.remove('show'); return; }
+  eye.thumbUrl = URL.createObjectURL(shot.blob);
+  box.querySelector('img').src = eye.thumbUrl;
+  const kb = Math.round(shot.blob.size / 1024);
+  const after = ((shot.frame.captured_at - shot.frame.asked_at) / 1000).toFixed(1);
+  box.querySelector('span').textContent = `Frame sent: ${shot.frame.width}×${shot.frame.height} JPEG, ${kb} KB, captured ${after}s after you asked.`;
+  box.classList.add('show');
+}
+
+screenBtn.addEventListener('click', () => { shareLive() ? stopShare() : startShare(); });
+document.getElementById('eye-stop').addEventListener('click', stopShare);
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { screenBtn.disabled = true; screenBtn.title = 'Screen sharing isn’t available in this browser'; }
+
 // ---------- boot greeting ----------
 // Wording comes from BOOT_GREETING in server.py's persona block. The count is read from the graph
 // data and the time of day from this computer's clock. Shown at once; spoken at the first click,
@@ -821,7 +977,7 @@ async function bootGreeting() {
 bootGreeting();
 
 setTimeout(() => { const l = document.getElementById('loading'); l.style.opacity = 0; setTimeout(() => l.remove(), 900); }, 600);
-window.__galaxy = { Graph, nodes, focusNode, voice, ear };
+window.__galaxy = { Graph, nodes, focusNode, voice, ear, eye };
 </script>
 </body>
 </html>

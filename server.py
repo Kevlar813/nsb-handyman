@@ -56,8 +56,10 @@ NO_KEY_LINE = ("I'm afraid I cannot consult the notes without a key, sir. "
                "Your Anthropic API key goes in config.json, in the project folder.")
 # ═════════════════════════════════════════ end of persona ═══════════════════════════════════════
 
+import base64
 import json
 import math
+import time
 import os
 import re
 import threading
@@ -133,6 +135,7 @@ anything something does did any""".split())
 
 _lock = threading.Lock()
 _sessions = {}             # session id -> list of {"role", "content"} (text only, append-only per turn)
+_last_said_address = {}    # session id -> did the previous reply (notes or screen) use FORM_OF_ADDRESS
 _docs = []
 _doc_tokens = []
 _title_tokens = []
@@ -198,13 +201,13 @@ def load_config():
     return {"api_key": key, "model": cfg.get("model") or "claude-fable-5-1"}, None
 
 
-def call_claude(cfg, messages):
+def call_claude(cfg, messages, system=None, effort="low"):
     body = {
         "model": cfg["model"],
         "max_tokens": 16000,
-        "system": SYSTEM_PROMPT,
+        "system": system or SYSTEM_PROMPT,
         "messages": messages,
-        "output_config": {"effort": "low"},
+        "output_config": {"effort": effort},
         "fallbacks": "default",
     }
     req = urllib.request.Request(API_URL, data=json.dumps(body).encode(), method="POST", headers={
@@ -258,6 +261,18 @@ def limit_address(text, allowed):
     return re.sub(pattern, trim, text, flags=re.I | re.M)
 
 
+def guard_address(session, text):
+    """Apply limit_address across replies from both /chat and /see in the same session."""
+    with _lock:
+        said_last_time = _last_said_address.get(session, False)
+    text = limit_address(text, allowed=not said_last_time)
+    with _lock:
+        _last_said_address[session] = bool(re.search(rf"\b{re.escape(FORM_OF_ADDRESS)}\b", text, re.I))
+        while len(_last_said_address) > MAX_SESSIONS:
+            _last_said_address.pop(next(iter(_last_said_address)))
+    return text
+
+
 def parse_answer(text, offered):
     """Returns (answer, used note indexes in retrieval-rank order, intent or None)."""
     intent = None
@@ -305,9 +320,7 @@ def handle_chat(payload):
     text, err = call_claude(cfg, messages)
     if err:
         return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "api"}
-    said_it_last_time = any(m["role"] == "assistant" for m in history[-1:]) and re.search(
-        rf"\b{re.escape(FORM_OF_ADDRESS)}\b", history[-1]["content"], re.I)
-    text = limit_address(text, allowed=not said_it_last_time)
+    text = guard_address(session, text)
     answer, used, intent = parse_answer(text, picked)
     # Step 2: the model gets a vote too (it catches banter the patterns miss), but it can only
     # turn a notes question into chat, never the reverse.
@@ -324,6 +337,89 @@ def handle_chat(payload):
         while len(_sessions) > MAX_SESSIONS:
             _sessions.pop(next(iter(_sessions)))
     return 200, {"answer": answer, "nodes": used, "about_notes": about_notes, "session": session}
+
+
+# ---------- /see: questions about a frame of your shared screen ----------
+# Same persona, different rules: the screenshot is the only evidence. Each /see call is stateless
+# on purpose: no earlier frame and no earlier screen answer is ever sent again, so it cannot
+# answer from memory of what your screen used to show.
+SCREEN_PROTOCOL = """\
+Rules for this message, overriding any style above:
+- The attached image is a single frame of the user's screen, captured the moment they asked.
+  It is your only evidence. Answer specifically about what is actually visible in it: name the
+  app, page, document, numbers, labels or code you can actually read.
+- If the frame is too small, blurry, cropped or low-contrast to read the part the question is
+  about, say so plainly and say what you can and cannot make out. Never guess at text you cannot
+  read, and never describe anything outside the frame.
+- Do not use the user's notes or anything from earlier conversation; only this frame.
+- Up to four sentences for a dense screen; the first two are read aloud, so put the point first.
+- Give figures exactly as they appear on screen.
+"""
+SEE_SYSTEM_PROMPT = PERSONA.strip() + "\n\n" + SCREEN_PROTOCOL.strip()
+SEE_MEDIA_TYPE = "image/jpeg"   # the only type the page encodes; anything else is rejected, not relabelled
+SEE_MAX_BYTES = 8 * 1024 * 1024          # decoded JPEG; the page targets well under 5 MB
+SEE_MAX_FRAME_AGE_S = 15                 # a frame older than this was not captured "when you asked"
+
+
+def handle_see(payload):
+    question = str(payload.get("question", "")).strip()[:2000]
+    session = str(payload.get("session") or "")[:64] or uuid.uuid4().hex
+    base = {"nodes": [], "about_notes": False, "screen": True, "session": session}
+    if not question:
+        return 400, {**base, "answer": "Ask a question first.", "error": "empty_question"}
+
+    frame = payload.get("frame")
+    if not isinstance(frame, dict) or not frame.get("data"):
+        # The page only sends to /see while a share is live; no frame means it ended.
+        return 409, {**base, "error": "share_ended",
+                     "answer": "The screen share has ended, so I can't see your screen. Share it again and ask once more."}
+
+    media_type = str(frame.get("media_type", ""))
+    if media_type != SEE_MEDIA_TYPE:
+        return 400, {**base, "error": "bad_media_type",
+                     "answer": f"The page sent the frame as '{media_type}', but only {SEE_MEDIA_TYPE} is accepted."}
+    try:
+        raw = base64.b64decode(frame["data"], validate=True)
+    except (ValueError, TypeError):
+        return 400, {**base, "error": "bad_image", "answer": "The screen frame arrived garbled (invalid base64)."}
+    if not (raw[:3] == b"\xff\xd8\xff" and raw.rstrip(b"\x00")[-2:] == b"\xff\xd9"):
+        kind = "PNG" if raw[:8] == b"\x89PNG\r\n\x1a\n" else "WebP" if raw[8:12] == b"WEBP" else "not an image I recognise"
+        return 400, {**base, "error": "not_jpeg",
+                     "answer": f"The frame is labelled image/jpeg but its bytes are {kind}, so I refused to send it."}
+    if len(raw) > SEE_MAX_BYTES:
+        return 413, {**base, "error": "too_large", "answer": "That screen frame is too large to send."}
+    try:
+        captured_ms = float(frame.get("captured_at"))
+    except (TypeError, ValueError):
+        captured_ms = 0
+    try:
+        asked_ms = float(frame.get("asked_at"))
+    except (TypeError, ValueError):
+        asked_ms = None
+    if asked_ms is not None and captured_ms < asked_ms:
+        return 409, {**base, "error": "frame_before_question",
+                     "answer": "That screen frame was taken before you asked, so I won't answer from it. Ask again."}
+    age = time.time() - captured_ms / 1000
+    if not -2 <= age <= SEE_MAX_FRAME_AGE_S:
+        return 409, {**base, "error": "stale_frame",
+                     "answer": "That screen frame wasn't captured just now, so I won't answer from it. Ask again."}
+
+    cfg, err = load_config()
+    if err:
+        return 200, {**base, "answer": err, "error": "config"}
+    w, h = frame.get("width"), frame.get("height")
+    note = f"(Screen frame: {w}x{h} pixels, captured {age:.1f}s ago.)" if w and h else ""
+    messages = [{"role": "user", "content": [
+        {"type": "image", "source": {"type": "base64", "media_type": SEE_MEDIA_TYPE, "data": frame["data"]}},
+        {"type": "text", "text": f"{note}\n\n{question}".strip()},
+    ]}]
+    text, err = call_claude(cfg, messages, system=SEE_SYSTEM_PROMPT, effort="medium")
+    if err:
+        return 200, {**base, "answer": err, "error": "api"}
+    # A stray INTENT/SOURCES line (habit from the notes protocol) never reaches the screen or voice.
+    text = re.sub(r"^\s*(INTENT|SOURCES):.*$", "", text, flags=re.M | re.I).strip()
+    text = guard_address(session, text)
+    return 200, {**base, "answer": text, "frame_used": {"width": w, "height": h, "bytes": len(raw), "age_s": round(age, 2)}}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -346,22 +442,29 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if self.path.split("?")[0] == "/chat/reset":
+        route = self.path.split("?")[0]
+        if route == "/chat/reset":
             self.do_reset()
             return
-        if self.path.split("?")[0] != "/chat":
+        handlers = {"/chat": (handle_chat, 100_000), "/see": (handle_see, 12 * 1024 * 1024)}
+        if route not in handlers:
             self._json(404, {"error": "not_found"})
             return
+        handler, limit = handlers[route]
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            payload = json.loads(self.rfile.read(min(length, 100_000)) or b"{}")
+            if length > limit:
+                self.rfile.read(length)
+                self._json(413, {"answer": "That request is too large.", "nodes": [], "error": "too_large"})
+                return
+            payload = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(payload, dict):
                 raise ValueError("body must be a JSON object")
         except (ValueError, UnicodeDecodeError) as e:
             self._json(400, {"answer": f"Bad request: {e}", "nodes": [], "error": "bad_request"})
             return
         try:
-            status, obj = handle_chat(payload)
+            status, obj = handler(payload)
         except Exception as e:  # never crash the server on a chat request
             status, obj = 500, {"answer": f"Server error: {e}", "nodes": [], "error": "server"}
         self._json(status, obj)
