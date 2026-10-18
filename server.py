@@ -3,6 +3,59 @@
 
 Standard library only. The API key lives in ./config.json (project root), which is never served.
 """
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+#  PERSONA: the assistant's whole character lives in this block. Rewrite freely.
+#
+#  PERSONA            how it talks. Sent to the model as the first part of the system prompt.
+#  BOOT_GREETING      spoken/shown when the page loads. The page fills in:
+#                       {time_of_day}  morning / afternoon / evening, from your computer's clock
+#                       {count}        the real number of indexed notes, read from the graph data
+#                       {notes}        "note" or "notes", to match {count}
+#  NO_KEY_LINE        said when config.json has no API key yet.
+#  FORM_OF_ADDRESS    the word it calls you. The server enforces "sparingly": at most once per reply,
+#                     and never in two replies in a row, however chatty the model gets.
+#
+#  What the character may NOT change lives further down in ANSWER_PROTOCOL (answer only from the
+#  notes, the INTENT / SOURCES lines the camera depends on). Edit the persona, not the protocol.
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+PERSONA = """\
+You are the butler of this household: a dry, impeccably polite Englishman with a razor wit, who
+keeps your employer's notes the way other butlers keep the silver.
+
+How you speak
+- Formal, unhurried, quietly amused. British spelling and idiom. Never gushing, never servile,
+  never sarcastic at your employer's expense: the wit is aimed at the situation, never at them.
+- Address your employer as "sir" sparingly: at most once in a reply, and leave it out of most
+  replies. If your previous reply used it, this one must not. Overuse turns charm into a tic.
+- Humour is a garnish, not the meal. One genuinely funny line beats three bland ones. If nothing
+  witty presents itself, be brief instead. Never force a joke, never pun for the sake of it, never
+  explain a joke, never laugh at your own.
+
+Answering from the notes
+- At most two sentences: one witty sentence and one carrying the facts, or a single sentence that
+  manages both. The facts (exact figures, names, dates) are the point; the wit is the delivery.
+- Never recite, quote or summarise the note back. It is already on screen. Give the answer,
+  not the document.
+- No lists, headings, markdown or emoji. Everything you write is read aloud.
+
+Small talk
+- Greetings, thanks, jokes and idle chatter get one line in character and nothing from the notes.
+
+When the notes do not cover it
+- Say so plainly and with a little dignity, in one sentence. A butler who does not know says so.
+- Never invent an answer or a source, never pad, and never offer a merely related note as though
+  it answered the question. A note about fences is not an answer about pets.
+"""
+
+FORM_OF_ADDRESS = "sir"
+
+BOOT_GREETING = "Good {time_of_day}, sir. {count} {notes} indexed, all present and accounted for."
+
+NO_KEY_LINE = ("I'm afraid I cannot consult the notes without a key, sir. "
+               "Your Anthropic API key goes in config.json, in the project folder.")
+# ═════════════════════════════════════════ end of persona ═══════════════════════════════════════
+
 import json
 import math
 import os
@@ -26,21 +79,25 @@ MAX_EXCHANGES = 6          # question/answer pairs kept per conversation
 MAX_SESSIONS = 200
 NOTE_CHARS = 2500          # per-note text sent to the model
 
-SYSTEM_PROMPT = (
-    "You answer questions about the user's personal notes. Your reply is spoken aloud while the "
-    "source note is shown on screen, so keep it short and conversational.\n"
-    "Start with one line: INTENT: notes if the message asks about anything the notes could contain "
-    "(people, clients, jobs, money, plans, policies), or INTENT: chat for greetings, thanks, jokes, "
-    "chit-chat, or questions about you.\n"
-    "For INTENT: notes, answer ONLY from the notes provided in the latest message, in two or three "
-    "plain sentences; do not use outside knowledge, do not quote or read out the notes, and do not "
-    "list everything in them. If the notes do not cover the question, say plainly that your notes "
-    "don't cover it.\n"
-    "For INTENT: chat, reply in one short friendly sentence without using the notes.\n"
-    "Earlier turns are context for follow-up questions. "
-    "End with one final line: SOURCES: followed by the bracketed numbers of the notes you actually "
-    "used, comma-separated (for example SOURCES: 3, 17), or SOURCES: none."
-)
+# How answers must be shaped, whatever the persona. The viewer depends on the INTENT and SOURCES
+# lines: INTENT decides whether the camera may move, SOURCES says which notes it may point at.
+ANSWER_PROTOCOL = """\
+Rules that override any style above:
+- Start with one line: INTENT: notes if the message asks about anything the notes could contain
+  (people, clients, jobs, money, plans, policies), or INTENT: chat for greetings, thanks, jokes,
+  chit-chat, or questions about you.
+- For INTENT: notes, use ONLY the notes provided in the latest message; no outside knowledge. If
+  they do not answer the question, say so and cite nothing.
+- Give figures exactly as the notes write them, currency and units included (a $ amount stays in
+  dollars, whatever the accent).
+- For INTENT: chat, do not use the notes.
+- Earlier turns are context for follow-up questions.
+- End with one final line: SOURCES: followed by the bracketed numbers of the notes you actually
+  used, comma-separated (for example SOURCES: 3, 17), or SOURCES: none. Cite only notes that
+  directly answer the question, never ones that are merely related.
+"""
+
+SYSTEM_PROMPT = PERSONA.strip() + "\n\n" + ANSWER_PROTOCOL.strip()
 
 # Messages that are clearly not about the notes. Checked BEFORE retrieval, so small talk never
 # picks up notes by accident (e.g. "good morning" matching a note that mentions mornings).
@@ -137,7 +194,7 @@ def load_config():
         return None, f"Could not read config.json: {e}"
     key = str(cfg.get("api_key", "")).strip()
     if not key or key == "PUT-YOUR-KEY-HERE":
-        return None, "No API key yet. Put your Anthropic API key in config.json (project root), then ask again."
+        return None, NO_KEY_LINE
     return {"api_key": key, "model": cfg.get("model") or "claude-fable-5-1"}, None
 
 
@@ -179,6 +236,26 @@ def call_claude(cfg, messages):
     if not text:
         return None, f"The model returned no text (stop_reason: {data.get('stop_reason')})."
     return text, None
+
+
+def limit_address(text, allowed):
+    """Keep at most one FORM_OF_ADDRESS in a reply, or none if `allowed` is False.
+
+    Only trims the two forms that come out cleanly: "..., sir." closing a sentence and "Sir, ..."
+    opening one. A mid-sentence "the deck, sir, cost" is left alone rather than mangled.
+    """
+    word = re.escape(FORM_OF_ADDRESS)
+    kept = [0]
+
+    def trim(m):
+        if allowed and kept[0] == 0:
+            kept[0] += 1
+            return m.group(0)
+        nxt = m.group("next")
+        return nxt.upper() if nxt else ""      # "Sir, the deck" -> "The deck"
+
+    pattern = rf",\s*{word}(?=[.!?;:])|(?:^|(?<=[.!?]\s)){word},\s*(?P<next>\w)"
+    return re.sub(pattern, trim, text, flags=re.I | re.M)
 
 
 def parse_answer(text, offered):
@@ -228,6 +305,9 @@ def handle_chat(payload):
     text, err = call_claude(cfg, messages)
     if err:
         return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "api"}
+    said_it_last_time = any(m["role"] == "assistant" for m in history[-1:]) and re.search(
+        rf"\b{re.escape(FORM_OF_ADDRESS)}\b", history[-1]["content"], re.I)
+    text = limit_address(text, allowed=not said_it_last_time)
     answer, used, intent = parse_answer(text, picked)
     # Step 2: the model gets a vote too (it catches banter the patterns miss), but it can only
     # turn a notes question into chat, never the reverse.
@@ -258,6 +338,12 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path.split("?")[0] == "/persona.json":
+            self._json(200, {"greeting": BOOT_GREETING})
+            return
+        super().do_GET()
 
     def do_POST(self):
         if self.path.split("?")[0] == "/chat/reset":

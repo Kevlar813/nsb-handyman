@@ -61,6 +61,7 @@
   #answer { margin-bottom: 10px; padding: 16px 18px; display: none; max-height: 40vh; overflow-y: auto; }
   #answer.show { display: block; animation: rise .35s ease-out; }
   #answer .q { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  #answer .q:empty { display: none; }
   #answer .a { font-size: 15px; line-height: 1.6; }
   #answer.error .a { color: var(--warn); }
   #answer .sources { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -469,8 +470,12 @@ function proveAnswer(aboutNotes, ids) {
 // What gets spoken: the answer only (never the note), cut to SPOKEN_MAX_SENTENCES.
 function spokenVersion(answer) {
   const clean = answer.replace(/\[\d+(?:,\s*\d+)*\]/g, '').replace(/[*_#`>]/g, '').replace(/\s+/g, ' ').trim();
-  const sentences = clean.match(/[^.!?]+(?:[.!?]+["')\]]*|$)/g) || [clean];
-  return sentences.slice(0, SPOKEN_MAX_SENTENCES).join(' ').replace(/\s+/g, ' ').trim();
+  return sentencesOf(clean).slice(0, SPOKEN_MAX_SENTENCES).join(' ');
+}
+
+// Sentence boundaries are punctuation followed by a space, so "$3.50" or "1.5 hours" stay whole.
+function sentencesOf(text) {
+  return text.replace(/\s+/g, ' ').trim().split(/(?<=[.!?]["')\]]?)\s+/).filter(Boolean);
 }
 
 function cancelAsk() {
@@ -530,7 +535,6 @@ statusEl.addEventListener('click', () => { if (voice.speaking) { stopSpeaking();
 
 // ---------- voice out: speechSynthesis ----------
 const synth = window.speechSynthesis || null;
-const GREETING = 'Voice on. Ask me anything about your notes.';
 const voice = { unlocked: false, muted: false, chosen: null, pending: null, speaking: false, gen: 0,
                 utterances: [], current: '', recent: '', recentUntil: 0 };
 try { voice.muted = localStorage.getItem('galaxy.muted') === '1'; } catch {}
@@ -554,9 +558,8 @@ if (synth) {
 }
 
 function splitSentences(text) {
-  const parts = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [text];
   const out = [];
-  for (const p of parts.map(x => x.trim()).filter(Boolean)) {
+  for (const p of sentencesOf(text)) {
     if (out.length && out[out.length - 1].length < 40) out[out.length - 1] += ' ' + p; else out.push(p);
   }
   return out;
@@ -611,9 +614,9 @@ function rememberSpoken(chunk) {
 function unlockVoice() {
   if (voice.unlocked || !synth) return;
   voice.unlocked = true;
-  const first = voice.pending || GREETING;
+  const first = voice.pending;      // the boot greeting, or an answer that arrived before any click
   voice.pending = null;
-  speak(first);
+  if (first) speak(first);
 }
 ['pointerdown', 'keydown', 'touchend'].forEach(t => addEventListener(t, unlockVoice, { capture: true }));
 
@@ -792,6 +795,30 @@ function setMic(on) {
 if (!Recognition) { micBtn.disabled = true; micBtn.title = 'Voice input needs Chrome, Edge or Safari'; }
 micBtn.addEventListener('click', () => { if (Recognition) setMic(!ear.on); });
 renderStatus();
+
+// ---------- boot greeting ----------
+// Wording comes from BOOT_GREETING in server.py's persona block. The count is read from the graph
+// data and the time of day from this computer's clock. Shown at once; spoken at the first click,
+// because browsers refuse audio before you have interacted with the page.
+function timeOfDay(d = new Date()) {
+  const h = d.getHours();
+  return h >= 5 && h < 12 ? 'morning' : h >= 12 && h < 17 ? 'afternoon' : 'evening';
+}
+async function bootGreeting() {
+  let template = 'Good {time_of_day}. {count} {notes} indexed.';
+  try {
+    const r = await fetch('/persona.json');
+    if (r.ok) { const j = await r.json(); if (j.greeting) template = j.greeting; }
+  } catch {}
+  const count = GRAPH.nodes.length;
+  const text = template.replace(/\{time_of_day\}/g, timeOfDay())
+                       .replace(/\{count\}/g, count.toLocaleString('en-GB'))
+                       .replace(/\{notes\}/g, count === 1 ? 'note' : 'notes');
+  if (answerBox.classList.contains('show')) return;   // you already asked something
+  showAnswer('', text, []);
+  speak(text);
+}
+bootGreeting();
 
 setTimeout(() => { const l = document.getElementById('loading'); l.style.opacity = 0; setTimeout(() => l.remove(), 900); }, 600);
 window.__galaxy = { Graph, nodes, focusNode, voice, ear };
