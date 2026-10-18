@@ -13,6 +13,9 @@ Standard library only. The API key lives in ./config.json (project root), which 
 #                       {count}        the real number of indexed notes, read from the graph data
 #                       {notes}        "note" or "notes", to match {count}
 #  NO_KEY_LINE        said when config.json has no API key yet.
+#  MODEL_INTRO_PROMPT what a newly swapped-in brain is asked, so it introduces itself in its own words.
+#  MODEL_SWAPPED_LINE said instead when the new brain can't be asked (no API key yet).
+#  MODEL_REFUSED_LINE said when you name a model that doesn't exist. {asked} {current} {have}
 #  FORM_OF_ADDRESS    the word it calls you. The server enforces "sparingly": at most once per reply,
 #                     and never in two replies in a row, however chatty the model gets.
 #
@@ -54,7 +57,46 @@ BOOT_GREETING = "Good {time_of_day}, sir. {count} {notes} indexed, all present a
 
 NO_KEY_LINE = ("I'm afraid I cannot consult the notes without a key, sir. "
                "Your Anthropic API key goes in config.json, in the project folder.")
+
+MODEL_INTRO_PROMPT = ("You have just been swapped in as the household's brain. You are {name} "
+                      "(model id {model_id}). Introduce yourself in ONE dry sentence that names "
+                      "yourself as {name}. Nothing else.")
+MODEL_SWAPPED_LINE = "{name} at your service. I shall try not to let the promotion go to my head."
+MODEL_REFUSED_LINE = "I'm afraid there is no {asked} that I know of, so I have stayed on {current}. {have}"
 # ═════════════════════════════════════════ end of persona ═══════════════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+#  BRAINS: which models you can switch to by voice ("switch to Fable 5.1", "try on Haiku").
+#
+#  MODEL_IDS            every real model id this server knows exists. A spoken "family + version"
+#                       is turned into a candidate id ("opus 4.8" -> claude-opus-4-8) and accepted
+#                       ONLY if it is in this set. Anything else is refused with the list of what
+#                       does exist. There is deliberately no nearest-match fallback: "opus 6" must
+#                       never quietly become some other Opus.
+#  SPOKEN_MODEL_NAMES   the one dictionary of spoken names without a version. A bare family name
+#                       means the newest of that family. Every value must be in MODEL_IDS.
+#
+#  Swaps last until the server restarts; config.json is never written, so a restart always
+#  brings back the model named there.
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+MODEL_IDS = {
+    # Current, generally available models (October 2026). Not listed on purpose: Mythos
+    # (Project Glasswing only), retired Opus 4.1, and the deprecated 4.0 models.
+    "claude-fable-5-1", "claude-fable-5",
+    "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
+    "claude-sonnet-5-5", "claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5",
+    "claude-haiku-5-5", "claude-haiku-4-5",
+}
+
+SPOKEN_MODEL_NAMES = {
+    "fable": "claude-fable-5-1",      # newest Fable
+    "opus": "claude-opus-5-5",        # newest Opus
+    "sonnet": "claude-sonnet-5-5",    # newest Sonnet
+    "haiku": "claude-haiku-5-5",      # newest Haiku
+}
+
+MODEL_FAMILIES = ("fable", "opus", "sonnet", "haiku", "mythos")   # recognised, even if none are in MODEL_IDS
+# ═══════════════════════════════════════════ end of brains ══════════════════════════════════════
 
 import base64
 import hashlib
@@ -140,6 +182,9 @@ anything something does did any""".split())
 _lock = threading.Lock()
 _sessions = {}             # session id -> list of {"role", "content"} (text only, append-only per turn)
 _last_said_address = {}    # session id -> did the previous reply (notes or screen) use FORM_OF_ADDRESS
+_brain = {"model": None}   # runtime model swap; None = use config.json. Never saved anywhere.
+_brain_lock = threading.Lock()
+assert set(SPOKEN_MODEL_NAMES.values()) <= MODEL_IDS, "SPOKEN_MODEL_NAMES points at an id not in MODEL_IDS"
 # The notes index the server answers from. load_index() builds a complete new snapshot and swaps
 # it in with one assignment, so a request in flight always sees one consistent version.
 _idx = SimpleNamespace(docs=[], doc_tokens=[], title_tokens=[], idf={}, version="", sha256="",
@@ -225,24 +270,170 @@ def load_config():
     key = str(cfg.get("api_key", "")).strip()
     if not key or key == "PUT-YOUR-KEY-HERE":
         return None, NO_KEY_LINE
-    return {"api_key": key, "model": cfg.get("model") or "claude-fable-5-1"}, None
+    config_model = config_model_name(cfg)
+    return {"api_key": key, "model": _brain["model"] or config_model, "config_model": config_model}, None
 
 
-def call_claude(cfg, messages, system=None, effort="low"):
+def config_model_name(cfg=None):
+    """The model named in config.json: what the server uses unless you've swapped at runtime."""
+    if cfg is None:
+        try:
+            with open(CONFIG_PATH, encoding="utf-8") as f:
+                cfg = json.load(f)
+        except (OSError, ValueError):
+            cfg = {}
+    return str(cfg.get("model") or "claude-fable-5-1").strip()
+
+
+# ---------- brains: swapping the model at runtime ----------
+NUMBER_WORDS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+                "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"}
+MODEL_COMMAND = re.compile(
+    r"^(?:(?:please|ok|okay|right|now|hey|so|can you|could you|would you|let s|lets|i want to|i d like to)\s+)*"
+    r"(?:switch|swap|change|try|use|load|put|run|give|bring|go|return)\b")
+RESET_BRAIN = re.compile(
+    r"\b(?:normal|usual|regular|default|original|standard|old|configured|config)\s+(?:brain|model|self)\b"
+    r"|\breset\s+(?:the\s+|your\s+)?(?:brain|model)\b")
+
+
+def pretty_model(model_id):
+    """claude-opus-4-8 -> Opus 4.8; claude-sonnet-5 -> Sonnet 5. Unknown shapes come back unchanged."""
+    m = re.fullmatch(r"claude-([a-z]+)-(\d+(?:-\d+)*)", model_id)
+    return f"{m.group(1).title()} {m.group(2).replace('-', '.')}" if m else model_id
+
+
+def model_sort_key(model_id):
+    return [int(x) for x in re.findall(r"\d+", model_id)]
+
+
+def normalise_spoken(text):
+    t = text.lower()
+    t = re.sub(r"\b(" + "|".join(NUMBER_WORDS) + r")\b", lambda m: NUMBER_WORDS[m.group(1)], t)
+    t = re.sub(r"(\d)\s*(?:point|dot)\s*(\d)", r"\1.\2", t)        # "five point one" -> "5.1"
+    t = re.sub(r"[^a-z0-9.\- ]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def resolve_model(text):
+    """Turn what you said into a model id, or explain why not. Never guesses.
+
+    Returns one of: ("model", id) | ("reset", None) | ("unknown", (asked, family))
+                    | ("ambiguous", [families]) | ("none", None)
+    """
+    t = normalise_spoken(text)
+    exact = re.search(r"\bclaude-[a-z]+(?:-\d+)+\b", t)
+    if exact:
+        mid = exact.group(0)
+        return ("model", mid) if mid in MODEL_IDS else ("unknown", (mid, mid.split("-")[1]))
+    if RESET_BRAIN.search(t):
+        return ("reset", None)
+    families = sorted(set(re.findall(r"\b(" + "|".join(MODEL_FAMILIES) + r")\b", t)))
+    if not families:
+        return ("none", None)
+    if len(families) > 1:
+        return ("ambiguous", families)
+    fam = families[0]
+    # A version must directly follow the family: "opus 4.8", "opus 4 8", "sonnet five".
+    m = re.search(rf"\b{fam}\s+(\d+)(?:\s*[.\-]\s*(\d+)|\s+(\d+)\b)?", t)
+    if m:
+        major, minor = m.group(1), m.group(2) or m.group(3)
+        candidate = f"claude-{fam}-{major}" + (f"-{minor}" if minor else "")
+        asked = f"{fam.title()} {major}" + (f".{minor}" if minor else "")
+        # The whole safety rule: the exact candidate is in the set, or it is refused.
+        return ("model", candidate) if candidate in MODEL_IDS else ("unknown", (asked, fam))
+    if fam in SPOKEN_MODEL_NAMES:
+        return ("model", SPOKEN_MODEL_NAMES[fam])
+    return ("unknown", (fam.title(), fam))
+
+
+def is_model_command(text):
+    t = normalise_spoken(text)
+    if RESET_BRAIN.search(t):
+        return True
+    return bool(MODEL_COMMAND.match(t)) and bool(
+        re.search(r"\b(" + "|".join(MODEL_FAMILIES) + r"|brain|brains|model)\b|\bclaude-[a-z]+-\d", t))
+
+
+def brain_info():
+    config_model = config_model_name()
+    current = _brain["model"] or config_model
+    return {"model": current, "name": pretty_model(current), "config_model": config_model,
+            "temporary": current != config_model}
+
+
+def models_we_have(family=None):
+    ids = sorted((m for m in MODEL_IDS if family is None or m.split("-")[1] == family), key=model_sort_key, reverse=True)
+    return ", ".join(pretty_model(m) for m in ids)
+
+
+def handle_model(payload):
+    """POST /model {"name": "switch to fable 5.1"} or {"model": "claude-haiku-5-5"}."""
+    said = str(payload.get("model") or payload.get("name") or "").strip()[:200]
+    session = str(payload.get("session") or "")[:64]
+    current = brain_info()
+    kind, value = resolve_model(said)
+    if kind == "none":
+        return 400, {"ok": False, "error": "no_model_named", **current,
+                     "answer": f"Which brain? I can switch to {models_we_have()}."}
+    if kind == "ambiguous":
+        return 400, {"ok": False, "error": "ambiguous_model", **current,
+                     "answer": f"I heard both {' and '.join(f.title() for f in value)}, so I have stayed on "
+                               f"{current['name']}. Name just one."}
+    if kind == "unknown":
+        asked, family = value
+        have = (f"Of the {family.title()} models, I have {models_we_have(family)}." if models_we_have(family)
+                else f"I have no {family.title()} models at all. I do have {models_we_have()}.")
+        return 400, {"ok": False, "error": "unknown_model", "asked": asked, **current,
+                     "answer": MODEL_REFUSED_LINE.format(asked=asked, current=current["name"], have=have)}
+
+    new_id = current["config_model"] if kind == "reset" else value
+    with _brain_lock:
+        if new_id == current["model"]:
+            return 200, {"ok": True, "changed": False, **current,
+                         "answer": f"I am already running on {pretty_model(new_id)}."}
+        cfg, err = load_config()
+        verified = False
+        if err:
+            intro = MODEL_SWAPPED_LINE.format(name=pretty_model(new_id)) + " (Not checked: there is no API key yet.)"
+        else:
+            # Ask the new brain itself to say hello. No fallbacks: if it can't answer, we don't switch.
+            meta = {}
+            text, call_err = call_claude(
+                dict(cfg, model=new_id), [{"role": "user", "content": "Introduce yourself."}],
+                system=PERSONA.strip() + "\n\n" + MODEL_INTRO_PROMPT.format(name=pretty_model(new_id), model_id=new_id),
+                effort="low", fallbacks=False, meta=meta, max_tokens=2000)
+            if call_err:
+                return 502, {"ok": False, "error": "model_unreachable", **current,
+                             "answer": f"I couldn't get an answer from {pretty_model(new_id)} with your key, so I have "
+                                       f"stayed on {current['name']}. {call_err}"}
+            if not str(meta.get("model", "")).startswith(new_id):
+                return 502, {"ok": False, "error": "wrong_model_answered", **current,
+                             "answer": f"I asked for {pretty_model(new_id)} but {meta.get('model')} answered, so I "
+                                       f"have stayed on {current['name']}."}
+            intro = re.sub(r"^\s*(INTENT|SOURCES):.*$", "", text, flags=re.M | re.I).strip()
+            verified = True
+        _brain["model"] = None if new_id == current["config_model"] else new_id
+    if session:
+        intro = guard_address(session, intro)
+    return 200, {"ok": True, "changed": True, "verified": verified, "previous": current["model"],
+                 "answer": intro, **brain_info()}
+
+
+def call_claude(cfg, messages, system=None, effort="low", fallbacks=True, meta=None, max_tokens=16000):
+    """One Messages API call. Returns (text, error). If `meta` is a dict, meta["model"] is set to the
+    model the API says answered, which can differ from the one asked for when a fallback kicks in."""
     body = {
         "model": cfg["model"],
-        "max_tokens": 16000,
+        "max_tokens": max_tokens,
         "system": system or SYSTEM_PROMPT,
         "messages": messages,
         "output_config": {"effort": effort},
-        "fallbacks": "default",
     }
-    req = urllib.request.Request(API_URL, data=json.dumps(body).encode(), method="POST", headers={
-        "content-type": "application/json",
-        "x-api-key": cfg["api_key"],
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "server-side-fallback-2026-07-01",
-    })
+    headers = {"content-type": "application/json", "x-api-key": cfg["api_key"], "anthropic-version": "2023-06-01"}
+    if fallbacks:
+        body["fallbacks"] = "default"
+        headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
+    req = urllib.request.Request(API_URL, data=json.dumps(body).encode(), method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             data = json.load(resp)
@@ -260,6 +451,8 @@ def call_claude(cfg, messages, system=None, effort="low"):
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return None, f"Could not reach the Anthropic API: {getattr(e, 'reason', e)}"
 
+    if meta is not None:
+        meta["model"] = data.get("model") or cfg["model"]
     if data.get("stop_reason") == "refusal":
         return None, "The model declined to answer this question."
     text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
@@ -327,11 +520,17 @@ def handle_chat(payload):
     previous_q = next((m["question"] for m in reversed(history) if m["role"] == "user"), "")
 
     idx = _idx   # one snapshot for the whole request, even if /remember rebuilds meanwhile
+    # "switch to Fable 5.1" said into the mic arrives here like any question.
+    if is_model_command(question):
+        _, r = handle_model({"name": question, "session": session})
+        return 200, {"answer": r["answer"], "nodes": [], "about_notes": False, "session": session,
+                     "retrieved": [], "graph_version": idx.version, "brain": brain_info(),
+                     **({"error": r["error"]} if not r.get("ok") else {})}
     # Step 1: decide whether this is about the notes at all. Only then look for notes.
     small_talk = is_small_talk(question)
     picked = [] if small_talk else score_notes(question, previous_q, idx)
     # Every reply says which notes were retrieved and which graph version the indexes refer to.
-    meta = {"session": session, "retrieved": picked, "graph_version": idx.version}
+    meta = {"session": session, "retrieved": picked, "graph_version": idx.version, "brain": brain_info()}
 
     cfg, err = load_config()
     if err:
@@ -347,9 +546,11 @@ def handle_chat(payload):
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": user_content})
 
-    text, err = call_claude(cfg, messages)
+    served = {}
+    text, err = call_claude(cfg, messages, meta=served)
     if err:
         return 200, {"answer": err, "nodes": [], "about_notes": False, "error": "api", **meta}
+    meta["answered_by"] = served.get("model")
     text = guard_address(session, text)
     answer, used, intent = parse_answer(text, picked)
     # Step 2: the model gets a vote too (it catches banter the patterns miss), but it can only
@@ -441,7 +642,7 @@ SEE_MAX_FRAME_AGE_S = 15                 # a frame older than this was not captu
 def handle_see(payload):
     question = str(payload.get("question", "")).strip()[:2000]
     session = str(payload.get("session") or "")[:64] or uuid.uuid4().hex
-    base = {"nodes": [], "about_notes": False, "screen": True, "session": session}
+    base = {"nodes": [], "about_notes": False, "screen": True, "session": session, "brain": brain_info()}
     if not question:
         return 400, {**base, "answer": "Ask a question first.", "error": "empty_question"}
 
@@ -490,9 +691,11 @@ def handle_see(payload):
         {"type": "image", "source": {"type": "base64", "media_type": SEE_MEDIA_TYPE, "data": frame["data"]}},
         {"type": "text", "text": f"{note}\n\n{question}".strip()},
     ]}]
-    text, err = call_claude(cfg, messages, system=SEE_SYSTEM_PROMPT, effort="medium")
+    served = {}
+    text, err = call_claude(cfg, messages, system=SEE_SYSTEM_PROMPT, effort="medium", meta=served)
     if err:
         return 200, {**base, "answer": err, "error": "api"}
+    base["answered_by"] = served.get("model")
     # A stray INTENT/SOURCES line (habit from the notes protocol) never reaches the screen or voice.
     text = re.sub(r"^\s*(INTENT|SOURCES):.*$", "", text, flags=re.M | re.I).strip()
     text = guard_address(session, text)
@@ -516,6 +719,10 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/persona.json":
             self._json(200, {"greeting": BOOT_GREETING})
             return
+        if self.path.split("?")[0] == "/model":
+            self._json(200, {**brain_info(), "known": sorted(MODEL_IDS, key=model_sort_key, reverse=True),
+                             "spoken_names": SPOKEN_MODEL_NAMES})
+            return
         if self.path.split("?")[0] == "/__status":
             # Fingerprints of what this process is running; no secrets, no paths.
             idx = _idx
@@ -532,7 +739,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.do_reset()
             return
         handlers = {"/chat": (handle_chat, 100_000), "/see": (handle_see, 12 * 1024 * 1024),
-                    "/remember": (handle_remember, 100_000), "/reindex": (handle_reindex, 1_000)}
+                    "/remember": (handle_remember, 100_000), "/reindex": (handle_reindex, 1_000),
+                    "/model": (handle_model, 10_000)}
         if route not in handlers:
             self._json(404, {"error": "not_found"})
             return

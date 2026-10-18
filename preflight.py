@@ -505,6 +505,59 @@ def check_cdn(s, st):
     return Result(PASS, f"all {len(urls)} library URLs the page loads respond 200")
 
 
+def check_brain(s, st):
+    if not st.get("server_up"):
+        return Result(WARN, "not run: server is down")
+    status, _, body = s.get("/model")
+    if status != 200:
+        return Result(FAIL, f"GET /model returned HTTP {status} (server running old code?)")
+    info = json.loads(body)
+    start, config, known, spoken = info["model"], info["config_model"], info["known"], info["spoken_names"]
+    current = lambda: json.loads(s.get("/model")[2])["model"]
+    details, problems = [f"running {info['name']} ({start}); config.json names {config}"], []
+    # 1. Models that don't exist must be refused, and the brain must not move. "haiku 5" sits between
+    #    two real Haikus (5.5 and 4.5): a loose matcher would pick one; this must refuse.
+    for said in ("switch to opus 6", "switch to haiku 5"):
+        _, d = s.post_json("/model", {"name": said})
+        now = current()
+        if d.get("ok") or d.get("error") != "unknown_model" or now != start:
+            problems.append(f"'{said}' was not refused: ok={d.get('ok')}, error={d.get('error')}, now on {now}")
+        else:
+            details.append(f"refused '{said}': \u201c{d['answer'][:120]}\u201d")
+    # 2. A real swap by spoken name, then put back exactly what was running before.
+    said, expected = ("try on haiku", spoken["haiku"]) if spoken["haiku"] != start else ("try on sonnet", spoken["sonnet"])
+    _, d = s.post_json("/model", {"name": said})
+    verified = d.get("verified")
+    try:
+        if not d.get("ok") or current() != expected:
+            problems.append(f"'{said}' did not switch to {expected}: {d.get('answer', '')[:120]}")
+        else:
+            details.append(f"'{said}' -> {expected} ({'introduced itself' if verified else 'not verified: no API key'}): "
+                           f"\u201c{d.get('answer', '')[:100]}\u201d")
+    finally:
+        back = {"name": "go back to your normal brain"} if start == config else {"model": start}
+        s.post_json("/model", back)
+        if current() != start:
+            problems.append(f"could not restore the brain to {start}; it is on {current()}")
+        else:
+            details.append(f"restored to {start}")
+    # 3. With a valid key: does the server's list of real models match what the key can see?
+    if st.get("key"):
+        code, models = anthropic("GET", "/v1/models?limit=1000", st["key"], timeout=30)
+        if code == 200:
+            offered = {m.get("id") for m in models.get("data", [])}
+            unseen = [m for m in known if m not in offered]
+            if unseen:
+                details.append("in MODEL_IDS but not offered to this key: " + ", ".join(unseen))
+                if not problems:
+                    return Result(WARN, "swaps and refusals work, but some listed models aren't available to your key", details)
+    if problems:
+        return Result(FAIL, "model switching is not safe", problems + details)
+    if not verified:
+        return Result(WARN, "refusals and swap-back work; the swap itself wasn't verified (no valid key)", details)
+    return Result(PASS, "refuses models that don't exist, swaps for real, and restores the brain", details)
+
+
 CHECKS = [
     # The eight required checks, in the required order.
     ("The server is up and serving the viewer", check_server_up),
@@ -521,6 +574,7 @@ CHECKS = [
     ("/see reads a real JPEG", check_see),
     ("The boot greeting is served", check_greeting),
     ("The libraries the page loads from the CDN exist", check_cdn),
+    ("Swapping brains refuses models that don't exist, and goes back", check_brain),
 ]
 
 

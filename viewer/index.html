@@ -39,6 +39,14 @@
   #hud { position: fixed; top: 16px; left: 16px; padding: 14px 16px; max-width: 280px; z-index: 5; }
   #hud h1 { margin: 0 0 2px; font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   #hud .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .brain-chip { display: inline-flex; align-items: center; gap: 6px; margin: -2px 0 10px; padding: 3px 10px 3px 4px;
+    border-radius: 999px; font-size: 12px; background: rgba(122,162,255,.12); border: 1px solid rgba(122,162,255,.35); }
+  .brain-chip .lbl { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px;
+    border-radius: 999px; background: var(--accent); color: #061033; }
+  .brain-chip.temporary { background: rgba(255,184,107,.12); border-color: rgba(255,184,107,.5); }
+  .brain-chip.temporary .lbl { background: var(--warn); }
+  .brain-chip.changed { animation: brainpop .9s ease-out; }
+  @keyframes brainpop { 0% { transform: scale(1.18); box-shadow: 0 0 22px var(--accent); } 100% { transform: none; box-shadow: none; } }
   #legend { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px;
     border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
@@ -157,6 +165,7 @@
 <div id="hud" class="glass">
   <h1>Knowledge Galaxy</h1>
   <div class="sub" id="stats"></div>
+  <div id="brain" class="brain-chip" title="The model answering your questions"><span class="lbl">Brain</span><span class="nm">…</span></div>
   <div id="legend"></div>
 </div>
 
@@ -468,6 +477,9 @@ async function ask(q) {
     const data = await res.json();
     if (seq !== askSeq) return;
     if (data.session) session = data.session;
+    if (data.brain) renderBrain(data.brain);
+    if (data.answered_by && data.brain && !String(data.answered_by).startsWith(data.brain.model))
+      flashStatus(`This answer came from ${data.answered_by}, not ${data.brain.name} (a fallback)`, 'warn', 8000);
     // Note numbers only mean something against the graph version they came from. If the notes were
     // re-indexed since this page loaded (e.g. by /remember), don't point at the wrong stars.
     const stale = !!(data.graph_version && GRAPH.version && data.graph_version !== GRAPH.version);
@@ -955,6 +967,19 @@ function showFrameUsed(shot, info) {
 screenBtn.addEventListener('click', () => { shareLive() ? stopShare() : startShare(); });
 document.getElementById('eye-stop').addEventListener('click', stopShare);
 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { screenBtn.disabled = true; screenBtn.title = 'Screen sharing isn’t available in this browser'; }
+
+// ---------- brain chip ----------
+// Shows which model is answering. Amber means a runtime swap, which lasts until the server restarts.
+let brainModel = null;
+function renderBrain(b) {
+  const chip = document.getElementById('brain');
+  chip.querySelector('.nm').textContent = b.temporary ? `${b.name} \u00b7 until restart` : b.name;
+  chip.title = b.temporary ? `${b.model} (runtime swap; config.json says ${b.config_model})` : `${b.model} (from config.json)`;
+  chip.classList.toggle('temporary', !!b.temporary);
+  if (brainModel && brainModel !== b.model) { chip.classList.remove('changed'); void chip.offsetWidth; chip.classList.add('changed'); }
+  brainModel = b.model;
+}
+fetch('/model').then(r => r.ok ? r.json() : null).then(b => { if (b) renderBrain(b); }).catch(() => {});
 
 // ---------- boot greeting ----------
 // Wording comes from BOOT_GREETING in server.py's persona block. The count is read from the graph
