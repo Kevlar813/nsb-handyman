@@ -27,13 +27,44 @@ MAX_SESSIONS = 200
 NOTE_CHARS = 2500          # per-note text sent to the model
 
 SYSTEM_PROMPT = (
-    "You answer questions about the user's personal notes. Answer ONLY from the notes provided "
-    "in the latest message; do not use outside knowledge. Reply in two or three plain sentences. "
-    "If the notes do not cover the question, say plainly that your notes don't cover it. "
+    "You answer questions about the user's personal notes. Your reply is spoken aloud while the "
+    "source note is shown on screen, so keep it short and conversational.\n"
+    "Start with one line: INTENT: notes if the message asks about anything the notes could contain "
+    "(people, clients, jobs, money, plans, policies), or INTENT: chat for greetings, thanks, jokes, "
+    "chit-chat, or questions about you.\n"
+    "For INTENT: notes, answer ONLY from the notes provided in the latest message, in two or three "
+    "plain sentences; do not use outside knowledge, do not quote or read out the notes, and do not "
+    "list everything in them. If the notes do not cover the question, say plainly that your notes "
+    "don't cover it.\n"
+    "For INTENT: chat, reply in one short friendly sentence without using the notes.\n"
     "Earlier turns are context for follow-up questions. "
-    "After your answer, on its own final line, write SOURCES: followed by the bracketed numbers of "
-    "the notes you actually used, comma-separated (for example SOURCES: 3, 17), or SOURCES: none."
+    "End with one final line: SOURCES: followed by the bracketed numbers of the notes you actually "
+    "used, comma-separated (for example SOURCES: 3, 17), or SOURCES: none."
 )
+
+# Messages that are clearly not about the notes. Checked BEFORE retrieval, so small talk never
+# picks up notes by accident (e.g. "good morning" matching a note that mentions mornings).
+GREETING_PREFIX = re.compile(
+    r"^(?:(?:hi|hello|hey|hiya|howdy|yo|morning|evening|afternoon|good (?:morning|afternoon|evening|day|night)"
+    r"|thanks|thank you|cheers|ok(?:ay)?|right|so|um+|uh+|well)(?: there| all| everyone| mate| buddy| galaxy)?"
+    r"(?: (?:so|very) much| a lot)?\b[\s,!.]*)+", re.I)
+SMALL_TALK = re.compile(
+    r"^(?:"
+    r"how (?:are|r) (?:you|u|things)(?: doing)?(?: today)?|how'?s it going|how are things|what'?s up|sup|wh?at'?s new"
+    r"|(?:i'?m |we'?re )?(?:good|fine|great|well|ok(?:ay)?|not bad)(?: thanks| thank you)?(?: and you)?"
+    r"|thanks?(?: you)?(?: (?:so|very) much)?(?: a lot)?|cheers|nice(?: one)?|cool|great|awesome|perfect|lovely|brilliant"
+    r"|yes|yeah|yep|no|nope|sure|got it|makes sense|never ?mind|bye|goodbye|good ?night|see (?:you|ya)(?: later)?"
+    r"|ha(?:ha)+|lol|lmao|(?:tell|give) me (?:a |another )?joke.*|(?:say )?something funny|.*\bjokes?\b.*"
+    r"|who are you|what are you|what'?s your name|what can you do|are you (?:there|real|a robot|human)"
+    r"|i love you|you'?re (?:great|funny|awesome|the best)|good (?:job|work)|well done"
+    r")$", re.I)
+
+
+def is_small_talk(question):
+    """True when the whole message is greeting / thanks / banter rather than a question about notes."""
+    q = re.sub(r"\s+", " ", question.lower()).strip(" ?!.,")
+    rest = GREETING_PREFIX.sub("", q).strip(" ?!.,")
+    return not rest or bool(SMALL_TALK.match(rest))
 
 STOPWORDS = set("""a about above after again against all am an and any are as at be because been before
 being below between both but by can did do does doing down during each few for from further had has have
@@ -151,13 +182,19 @@ def call_claude(cfg, messages):
 
 
 def parse_answer(text, offered):
+    """Returns (answer, used note indexes in retrieval-rank order, intent or None)."""
+    intent = None
+    m = re.search(r"^\s*INTENT:\s*(\w+).*$", text, flags=re.M | re.I)
+    if m:
+        intent = m.group(1).lower()
+        text = (text[: m.start()] + text[m.end():]).strip()
     m = re.search(r"^\s*SOURCES:\s*(.*)$", text, flags=re.M | re.I)
     used = offered
     if m:
-        nums = [int(n) for n in re.findall(r"\d+", m.group(1))]
-        used = [n for n in nums if n in offered] if nums else []
+        cited = {int(n) for n in re.findall(r"\d+", m.group(1))}
+        used = [n for n in offered if n in cited]      # keep retrieval order: used[0] is the top source
         text = (text[: m.start()] + text[m.end():]).strip()
-    return text, used
+    return text, used, intent
 
 
 def handle_chat(payload):
@@ -169,23 +206,34 @@ def handle_chat(payload):
     with _lock:
         history = list(_sessions.get(session, []))
     previous_q = next((m["question"] for m in reversed(history) if m["role"] == "user"), "")
-    picked = score_notes(question, previous_q)
+
+    # Step 1: decide whether this is about the notes at all. Only then look for notes.
+    small_talk = is_small_talk(question)
+    picked = [] if small_talk else score_notes(question, previous_q)
 
     cfg, err = load_config()
     if err:
-        return 200, {"answer": err, "nodes": [], "session": session, "error": "config"}
+        return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "config"}
 
-    notes_block = "\n\n".join(
-        f"[{i}] {_docs[i]['label']} (folder: {_docs[i]['group']})\n{_docs[i]['text'][:NOTE_CHARS]}"
-        for i in picked) or "(No notes matched this question.)"
+    if small_talk:
+        notes_block = "(None: this message looks like small talk, so no notes were attached.)"
+    else:
+        notes_block = "\n\n".join(
+            f"[{i}] {_docs[i]['label']} (folder: {_docs[i]['group']})\n{_docs[i]['text'][:NOTE_CHARS]}"
+            for i in picked) or "(No notes matched this question.)"
     user_content = f"<notes>\n{notes_block}\n</notes>\n\nQuestion: {question}"
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": user_content})
 
     text, err = call_claude(cfg, messages)
     if err:
-        return 200, {"answer": err, "nodes": [], "session": session, "error": "api"}
-    answer, used = parse_answer(text, picked)
+        return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "api"}
+    answer, used, intent = parse_answer(text, picked)
+    # Step 2: the model gets a vote too (it catches banter the patterns miss), but it can only
+    # turn a notes question into chat, never the reverse.
+    about_notes = not small_talk and intent != "chat"
+    if not about_notes:
+        used = []
 
     with _lock:
         turns = _sessions.get(session, []) + [
@@ -195,7 +243,7 @@ def handle_chat(payload):
         _sessions[session] = turns[-2 * MAX_EXCHANGES:]
         while len(_sessions) > MAX_SESSIONS:
             _sessions.pop(next(iter(_sessions)))
-    return 200, {"answer": answer, "nodes": used, "session": session}
+    return 200, {"answer": answer, "nodes": used, "about_notes": about_notes, "session": session}
 
 
 class Handler(SimpleHTTPRequestHandler):

@@ -7,6 +7,10 @@
   // How long (ms) to wait after your last words before sending a spoken question.
   // A pause shorter than this joins the next phrase onto the same question.
   const FINISH_MS = 900;
+  // An answer citing this many notes or more lights the whole cluster instead of flying to one note.
+  const CLUSTER_MIN = 4;
+  // Spoken answers stop after this many sentences; the full answer and the note stay on screen.
+  const SPOKEN_MAX_SENTENCES = 2;
 </script>
 <title>Knowledge Galaxy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,6 +45,9 @@
   #panel { position: fixed; top: 16px; right: 16px; width: 360px; max-height: calc(100% - 150px);
     padding: 20px; overflow-y: auto; transform: translateX(calc(100% + 24px)); transition: transform .45s cubic-bezier(.2,.8,.2,1); z-index: 5; }
   #panel.open { transform: none; }
+  .source-badge { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 999px; color: #061033; background: var(--accent);
+    box-shadow: 0 0 14px rgba(122,162,255,.6); vertical-align: middle; }
   #panel h2 { margin: 6px 0 12px; font-size: 20px; font-weight: 600; line-height: 1.25; padding-right: 24px; }
   #panel .excerpt { font-size: 14px; line-height: 1.6; color: #cdd5f5; white-space: pre-wrap; }
   #panel .path { color: var(--muted); font-size: 11px; margin-top: 12px; word-break: break-all; }
@@ -129,6 +136,7 @@
 <aside id="panel" class="glass" aria-live="polite">
   <button class="close" id="close" aria-label="Close">×</button>
   <span class="chip" id="p-group"><span class="dot"></span><span></span></span>
+  <span class="source-badge" id="p-source" hidden>Answer source</span>
   <h2 id="p-title"></h2>
   <div class="excerpt" id="p-excerpt"></div>
   <div class="path" id="p-path"></div>
@@ -323,7 +331,8 @@ function chip(n) {
   el.addEventListener('click', () => focusNode(n));
   return el;
 }
-function openPanel(n) {
+function openPanel(n, asSource = false) {
+  document.getElementById('p-source').hidden = !asSource;
   const g = document.getElementById('p-group');
   g.style.color = groupColor[n.group];
   g.lastElementChild.textContent = n.group; g.lastElementChild.style.color = 'var(--text)';
@@ -415,21 +424,53 @@ async function ask(q) {
     const ids = (data.nodes || []).filter(i => Number.isInteger(i) && nodes[i]);
     const answer = data.answer || 'No answer returned.';
     showAnswer(q, answer, ids, !!data.error);
-    answerSet = new Set(ids);
-    focusId = null; panel.classList.remove('open');
-    lit = new Set(ids); applyHighlight();
-    if (ids.length) { pauseRotation(12000); Graph.zoomToFit(1600, 120, n => answerSet.has(n.id)); }
+    proveAnswer(data.about_notes === true, ids);
     thinking = false;
-    speak(answer);
+    speak(spokenVersion(answer));
   } catch (err) {
     if (err.name === 'AbortError' || seq !== askSeq) return;
-    const msg = `Could not reach the server: ${err.message}`;
+    const msg = `Could not reach the server: ${err.message}`;   // graph holds still on errors
     showAnswer(q, msg, [], true);
     thinking = false;
     speak(msg);
   } finally {
     if (seq === askSeq) { thinking = false; askCtl = null; send.disabled = false; renderStatus(); if (!ear.on) input.focus(); }
   }
+}
+
+// Show where an answer came from. The order of the checks is the point:
+//   1. Was the message about the notes at all? Small talk ("good morning", a joke) leaves the
+//      graph exactly as it was: no camera move, no highlight change, panel untouched.
+//   2. Only then look at how many notes it used:
+//      1..CLUSTER_MIN-1 notes -> fly to the top source, light it and its neighbours, open its panel.
+//      CLUSTER_MIN or more    -> no flight (one node of six would misrepresent the answer);
+//                                light the whole cited cluster where it sits.
+//      none                   -> a notes question the notes don't cover: clear stale highlights so
+//                                nothing on screen falsely claims to be a source; camera stays.
+function proveAnswer(aboutNotes, ids) {
+  if (!aboutNotes) return;
+  if (!ids.length) { answerSet = new Set(); clearFocus(); return; }
+  answerSet = new Set(ids);
+  if (ids.length >= CLUSTER_MIN) {
+    focusId = null;
+    panel.classList.remove('open');
+    lit = new Set(ids);
+    applyHighlight();
+    return;
+  }
+  const top = nodes[ids[0]];
+  focusId = top.id;
+  lit = new Set([top.id, ...neighbours[top.id], ...ids]);
+  applyHighlight();
+  openPanel(top, true);
+  flyTo(top);
+}
+
+// What gets spoken: the answer only (never the note), cut to SPOKEN_MAX_SENTENCES.
+function spokenVersion(answer) {
+  const clean = answer.replace(/\[\d+(?:,\s*\d+)*\]/g, '').replace(/[*_#`>]/g, '').replace(/\s+/g, ' ').trim();
+  const sentences = clean.match(/[^.!?]+(?:[.!?]+["')\]]*|$)/g) || [clean];
+  return sentences.slice(0, SPOKEN_MAX_SENTENCES).join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function cancelAsk() {
