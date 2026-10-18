@@ -468,11 +468,15 @@ async function ask(q) {
     const data = await res.json();
     if (seq !== askSeq) return;
     if (data.session) session = data.session;
-    const ids = (data.nodes || []).filter(i => Number.isInteger(i) && nodes[i]);
+    // Note numbers only mean something against the graph version they came from. If the notes were
+    // re-indexed since this page loaded (e.g. by /remember), don't point at the wrong stars.
+    const stale = !!(data.graph_version && GRAPH.version && data.graph_version !== GRAPH.version);
+    const ids = stale ? [] : (data.nodes || []).filter(i => Number.isInteger(i) && nodes[i]);
     const answer = data.answer || 'No answer returned.';
     showAnswer(q, answer, ids, !!data.error);
     if (shot) showFrameUsed(shot, data.frame_used);
-    proveAnswer(data.about_notes === true, ids);
+    proveAnswer(!stale && data.about_notes === true, ids);
+    if (stale) flashStatus('Your notes changed since this page loaded \u2014 reload to see them in the galaxy', 'warn', 8000);
     thinking = false;
     speak(spokenVersion(answer));
   } catch (err) {

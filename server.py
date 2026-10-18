@@ -57,6 +57,7 @@ NO_KEY_LINE = ("I'm afraid I cannot consult the notes without a key, sir. "
 # ═════════════════════════════════════════ end of persona ═══════════════════════════════════════
 
 import base64
+import hashlib
 import json
 import math
 import time
@@ -69,6 +70,9 @@ import uuid
 from collections import Counter
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
+
+import build
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 VIEWER_DIR = os.path.join(ROOT, "viewer")
@@ -136,10 +140,19 @@ anything something does did any""".split())
 _lock = threading.Lock()
 _sessions = {}             # session id -> list of {"role", "content"} (text only, append-only per turn)
 _last_said_address = {}    # session id -> did the previous reply (notes or screen) use FORM_OF_ADDRESS
-_docs = []
-_doc_tokens = []
-_title_tokens = []
-_idf = {}
+# The notes index the server answers from. load_index() builds a complete new snapshot and swaps
+# it in with one assignment, so a request in flight always sees one consistent version.
+_idx = SimpleNamespace(docs=[], doc_tokens=[], title_tokens=[], idf={}, version="", sha256="",
+                       notes_dir=os.path.join(ROOT, "notes"))
+_rebuild_lock = threading.Lock()   # one rebuild of notes -> graphdata.js/index.json at a time
+REMEMBER_FOLDER = "remembered"     # /remember writes here, inside the notes folder
+
+# What this process is actually running, so preflight.py can spot a server started from older code.
+with open(os.path.abspath(__file__), "rb") as _f:
+    SERVER_SHA256 = hashlib.sha256(_f.read()).hexdigest()
+with open(os.path.abspath(build.__file__), "rb") as _f:
+    BUILD_SHA256 = hashlib.sha256(_f.read()).hexdigest()
+STARTED_AT = time.time()
 
 
 def tokenize(text):
@@ -156,33 +169,47 @@ def tokenize(text):
 
 
 def load_index():
-    global _docs, _doc_tokens, _title_tokens, _idf
-    with open(INDEX_PATH, encoding="utf-8") as f:
-        docs = json.load(f)
+    global _idx
+    with open(INDEX_PATH, "rb") as f:
+        raw = f.read()
+    data = json.loads(raw)
+    if isinstance(data, list):                    # index.json from before build.py recorded metadata
+        docs, version, notes_dir = data, "", "notes"
+    else:
+        docs, version, notes_dir = data["docs"], data.get("version", ""), data.get("notes_dir") or "notes"
+    notes_dir = notes_dir if os.path.isabs(notes_dir) else os.path.join(ROOT, notes_dir)
     assert all(d["id"] == i for i, d in enumerate(docs)), "index.json ids must equal array index"
-    _docs = docs
-    _doc_tokens = [Counter(tokenize(d["text"])) for d in docs]
-    _title_tokens = [set(tokenize(d["label"])) for d in docs]
-    n = len(docs)
+    doc_tokens = [Counter(tokenize(d["text"])) for d in docs]
     df = Counter()
-    for c in _doc_tokens:
+    for c in doc_tokens:
         df.update(set(c))
-    _idf = {t: math.log(1 + n / k) for t, k in df.items()}
+    _idx = SimpleNamespace(
+        docs=docs, doc_tokens=doc_tokens, title_tokens=[set(tokenize(d["label"])) for d in docs],
+        idf={t: math.log(1 + len(docs) / k) for t, k in df.items()},
+        version=version, sha256=hashlib.sha256(raw).hexdigest(), notes_dir=notes_dir)
 
 
-def score_notes(question, previous_question=""):
+def rebuild_index():
+    """Re-index the notes folder from disk, write graphdata.js + index.json, and start answering from it."""
+    summary = build.write_outputs(_idx.notes_dir)
+    load_index()
+    return summary
+
+
+def score_notes(question, previous_question="", idx=None):
     """Keyword overlap; title hits weigh 4x body hits. Previous question adds context at half weight."""
+    idx = idx or _idx
     terms = [(t, 1.0) for t in set(tokenize(question))]
     terms += [(t, 0.5) for t in set(tokenize(previous_question)) - {t for t, _ in terms}]
     scores = []
-    for i in range(len(_docs)):
+    for i in range(len(idx.docs)):
         s = 0.0
         for t, w in terms:
-            idf = _idf.get(t, math.log(1 + len(_docs)))
-            body = _doc_tokens[i].get(t, 0)
+            idf = idx.idf.get(t, math.log(1 + len(idx.docs)))
+            body = idx.doc_tokens[i].get(t, 0)
             if body:
                 s += w * idf * (1 + math.log(body))
-            if t in _title_tokens[i]:
+            if t in idx.title_tokens[i]:
                 s += w * idf * 4
         scores.append((s, i))
     scores.sort(key=lambda x: (-x[0], x[1]))
@@ -299,19 +326,22 @@ def handle_chat(payload):
         history = list(_sessions.get(session, []))
     previous_q = next((m["question"] for m in reversed(history) if m["role"] == "user"), "")
 
+    idx = _idx   # one snapshot for the whole request, even if /remember rebuilds meanwhile
     # Step 1: decide whether this is about the notes at all. Only then look for notes.
     small_talk = is_small_talk(question)
-    picked = [] if small_talk else score_notes(question, previous_q)
+    picked = [] if small_talk else score_notes(question, previous_q, idx)
+    # Every reply says which notes were retrieved and which graph version the indexes refer to.
+    meta = {"session": session, "retrieved": picked, "graph_version": idx.version}
 
     cfg, err = load_config()
     if err:
-        return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "config"}
+        return 200, {"answer": err, "nodes": [], "about_notes": False, "error": "config", **meta}
 
     if small_talk:
         notes_block = "(None: this message looks like small talk, so no notes were attached.)"
     else:
         notes_block = "\n\n".join(
-            f"[{i}] {_docs[i]['label']} (folder: {_docs[i]['group']})\n{_docs[i]['text'][:NOTE_CHARS]}"
+            f"[{i}] {idx.docs[i]['label']} (folder: {idx.docs[i]['group']})\n{idx.docs[i]['text'][:NOTE_CHARS]}"
             for i in picked) or "(No notes matched this question.)"
     user_content = f"<notes>\n{notes_block}\n</notes>\n\nQuestion: {question}"
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
@@ -319,7 +349,7 @@ def handle_chat(payload):
 
     text, err = call_claude(cfg, messages)
     if err:
-        return 200, {"answer": err, "nodes": [], "about_notes": False, "session": session, "error": "api"}
+        return 200, {"answer": err, "nodes": [], "about_notes": False, "error": "api", **meta}
     text = guard_address(session, text)
     answer, used, intent = parse_answer(text, picked)
     # Step 2: the model gets a vote too (it catches banter the patterns miss), but it can only
@@ -336,7 +366,54 @@ def handle_chat(payload):
         _sessions[session] = turns[-2 * MAX_EXCHANGES:]
         while len(_sessions) > MAX_SESSIONS:
             _sessions.pop(next(iter(_sessions)))
-    return 200, {"answer": answer, "nodes": used, "about_notes": about_notes, "session": session}
+    return 200, {"answer": answer, "nodes": used, "about_notes": about_notes, **meta}
+
+
+# ---------- /remember and /reindex ----------
+def note_filename(title):
+    """A title made safe to use as a file name: no separators, no leading dots, at most 80 chars."""
+    title = re.sub(r"[^\w \-.,'&()]", "", re.sub(r"\s+", " ", str(title))).strip(" .")
+    return title[:80].strip(" .")
+
+
+def handle_remember(payload):
+    """Write a new note into <notes>/remembered/ and re-index, so /chat can find it immediately."""
+    title = note_filename(payload.get("title", ""))
+    text = str(payload.get("text", "")).strip()
+    if not title or not text:
+        return 400, {"ok": False, "error": "need_title_and_text", "answer": "A note needs a title and some text."}
+    if len(text) > 20000:
+        return 413, {"ok": False, "error": "too_large", "answer": "That note is too long (20,000 characters at most)."}
+    with _rebuild_lock:
+        folder = os.path.join(_idx.notes_dir, REMEMBER_FOLDER)
+        path = os.path.join(folder, title + ".md")
+        if os.path.dirname(os.path.abspath(path)) != os.path.abspath(folder):
+            return 400, {"ok": False, "error": "bad_title", "answer": "That title can't be used as a file name."}
+        os.makedirs(folder, exist_ok=True)
+        try:
+            with open(path, "x", encoding="utf-8") as f:          # "x": never overwrite a note
+                f.write(f"# {title}\n\n{text}\n")
+        except FileExistsError:
+            return 409, {"ok": False, "error": "exists", "answer": f"A note called '{title}' already exists."}
+        try:
+            rebuild_index()
+        except Exception as e:
+            os.remove(path)                                       # don't leave a note the index never saw
+            return 500, {"ok": False, "error": "reindex_failed", "answer": f"Saved, then re-indexing failed, so I removed it again: {e}"}
+        idx = _idx
+    rel = os.path.relpath(path, idx.notes_dir)
+    note_id = next((d["id"] for d in idx.docs if d["path"] == rel), None)
+    return 200, {"ok": True, "path": rel, "id": note_id, "notes": len(idx.docs), "graph_version": idx.version}
+
+
+def handle_reindex(payload):
+    """Re-read the notes folder from disk, e.g. after editing notes, without restarting the server."""
+    with _rebuild_lock:
+        try:
+            summary = rebuild_index()
+        except Exception as e:
+            return 500, {"ok": False, "error": "reindex_failed", "answer": f"Re-indexing failed: {e}"}
+    return 200, {"ok": True, "summary": summary, "notes": len(_idx.docs), "graph_version": _idx.version}
 
 
 # ---------- /see: questions about a frame of your shared screen ----------
@@ -439,6 +516,14 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/persona.json":
             self._json(200, {"greeting": BOOT_GREETING})
             return
+        if self.path.split("?")[0] == "/__status":
+            # Fingerprints of what this process is running; no secrets, no paths.
+            idx = _idx
+            self._json(200, {"server_sha256": SERVER_SHA256, "build_sha256": BUILD_SHA256,
+                             "index_sha256": idx.sha256,
+                             "graph_version": idx.version, "notes": len(idx.docs),
+                             "started_at": STARTED_AT, "pid": os.getpid()})
+            return
         super().do_GET()
 
     def do_POST(self):
@@ -446,7 +531,8 @@ class Handler(SimpleHTTPRequestHandler):
         if route == "/chat/reset":
             self.do_reset()
             return
-        handlers = {"/chat": (handle_chat, 100_000), "/see": (handle_see, 12 * 1024 * 1024)}
+        handlers = {"/chat": (handle_chat, 100_000), "/see": (handle_see, 12 * 1024 * 1024),
+                    "/remember": (handle_remember, 100_000), "/reindex": (handle_reindex, 1_000)}
         if route not in handlers:
             self._json(404, {"error": "not_found"})
             return
@@ -487,7 +573,7 @@ def main():
             json.dump({"api_key": "PUT-YOUR-KEY-HERE", "model": "claude-fable-5-1"}, f, indent=2)
     load_index()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), partial(Handler, directory=VIEWER_DIR))
-    print(f"Knowledge Galaxy: http://localhost:{PORT}  ({len(_docs)} notes, serving {VIEWER_DIR})")
+    print(f"Knowledge Galaxy: http://localhost:{PORT}  ({len(_idx.docs)} notes, serving {VIEWER_DIR})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
