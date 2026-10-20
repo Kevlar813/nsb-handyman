@@ -1,0 +1,3 @@
+[submodule "integrations/plat-agent"]
+	path = integrations/plat-agent
+	url = https://github.com/paintbrushv/plat-agent.git
