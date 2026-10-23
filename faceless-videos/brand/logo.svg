@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="spray" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3FD8FF"/>
+      <stop offset="1" stop-color="#0E9BD6"/>
+    </linearGradient>
+  </defs>
+  <!-- badge -->
+  <circle cx="500" cy="500" r="480" fill="#0A2342"/>
+  <circle cx="500" cy="500" r="448" fill="none" stroke="#1EC8F0" stroke-width="14"/>
+  <!-- roofline -->
+  <path d="M215 400 L500 175 L785 400" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- water drop -->
+  <path d="M500 250 C 470 300, 440 335, 440 368 A 60 60 0 0 0 560 368 C 560 335, 530 300, 500 250 Z" fill="url(#spray)"/>
+  <!-- wordmark -->
+  <text x="500" y="610" text-anchor="middle" font-family="Inter, 'Inter Display', Arial, sans-serif" font-weight="900" font-size="230" letter-spacing="-6" fill="#FFFFFF">NSB</text>
+  <text x="500" y="700" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="74" letter-spacing="14" fill="#1EC8F0">HANDYMAN</text>
+  <!-- tagline ribbon -->
+  <rect x="215" y="745" width="570" height="78" rx="39" fill="#FFC72C"/>
+  <text x="500" y="798" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="40" letter-spacing="5" fill="#0A2342">PRESSURE WASHING</text>
+</svg>

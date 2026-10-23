@@ -1,0 +1,18 @@
+{
+  "business": "NSB Handyman",
+  "phone": "(000) 000-0000",
+  "service_area": "YOUR CITY",
+  "offer_title": "FALL SPECIAL",
+  "offer_house": "$99",
+  "offer_driveway": "$79",
+  "colors": {
+    "navy": "#0A2342",
+    "aqua": "#1EC8F0",
+    "yellow": "#FFC72C",
+    "white": "#FFFFFF",
+    "dirt": "#6B5B45"
+  },
+  "font_black": "/usr/share/fonts/opentype/inter/Inter-Black.otf",
+  "font_bold": "/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf",
+  "ai_label": "AI illustration"
+}

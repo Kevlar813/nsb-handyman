@@ -1,0 +1,58 @@
+<!doctype html>
+<!--
+  NSB Handyman thumbnail template.
+  Fill the placeholders (or let tools/render_thumbs.py do it):
+    {{BEFORE}} {{AFTER}}  image paths/URLs
+    {{TEXT}}              2 short lines, use <br>
+    {{W}} {{H}}           1280x720 (YouTube) or 1080x1920 (Shorts/TikTok/Reels cover)
+    {{LOGO}} {{HOUSE}} {{DRIVEWAY}}
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: InterBlack; src: url("file:///usr/share/fonts/opentype/inter/Inter-Black.otf"); }
+  @font-face { font-family: InterXB; src: url("file:///usr/share/fonts/opentype/inter/Inter-ExtraBold.otf"); }
+  :root { --navy:#0A2342; --aqua:#1EC8F0; --yellow:#FFC72C; --w:{{W}}px; --h:{{H}}px; }
+  html, body { margin:0; width:var(--w); height:var(--h); overflow:hidden; background:var(--navy); }
+  .stage { position:relative; width:100%; height:100%; }
+  .half { position:absolute; inset:0; background-size:cover; background-position:center; }
+  .before { clip-path: polygon(0 0, 58% 0, 42% 100%, 0 100%); filter: saturate(0.85) contrast(1.05); }
+  .after  { clip-path: polygon(58% 0, 100% 0, 100% 100%, 42% 100%); filter: saturate(1.15) brightness(1.04); }
+  .seam { position:absolute; inset:0; background:#fff; clip-path: polygon(57.3% 0, 58.7% 0, 42.7% 100%, 41.3% 100%); }
+  .label { position:absolute; top:4%; padding:.25em .6em; border-radius:.4em; font:1em InterXB; letter-spacing:.06em; }
+  .label.b { left:3%; background:var(--navy); color:#fff; }
+  .label.a { right:3%; background:var(--yellow); color:var(--navy); }
+  .headline { position:absolute; left:0; right:0; text-align:center; font-family:InterBlack; color:#fff; line-height:.95;
+              text-transform:uppercase; -webkit-text-stroke: .045em #000; paint-order: stroke fill;
+              text-shadow: 0 .06em .12em rgba(0,0,0,.55); }
+  .logo { position:absolute; }
+  .price { position:absolute; background:var(--yellow); color:var(--navy); font-family:InterBlack; text-align:center;
+           border-radius:.35em; box-shadow:0 .1em .3em rgba(0,0,0,.45); line-height:1.05; padding:.3em .55em; }
+  .price small { display:block; font-family:InterXB; font-size:.42em; letter-spacing:.08em; }
+
+  /* landscape 1280x720 */
+  .land { font-size:44px; }
+  .land .headline { bottom:7%; font-size:118px; }
+  .land .logo { width:150px; left:24px; bottom:24px; }
+  .land .price { right:26px; bottom:30px; font-size:42px; transform:rotate(-4deg); }
+  /* portrait 1080x1920 */
+  .port { font-size:64px; }
+  .port .headline { top:37%; font-size:170px; }
+  .port .logo { width:260px; left:50%; transform:translateX(-50%); bottom:120px; }
+  .port .price { right:40px; top:14%; font-size:64px; transform:rotate(-5deg); }
+</style>
+</head>
+<body>
+  <div class="stage {{MODE}}">
+    <div class="half before" style="background-image:url('{{BEFORE}}')"></div>
+    <div class="half after" style="background-image:url('{{AFTER}}')"></div>
+    <div class="seam"></div>
+    <div class="label b">BEFORE</div>
+    <div class="label a">AFTER</div>
+    <div class="headline">{{TEXT}}</div>
+    <img class="logo" src="{{LOGO}}">
+    <div class="price">{{HOUSE}} HOUSE<br>{{DRIVEWAY}} DRIVEWAY<small>FALL SPECIAL</small></div>
+  </div>
+</body>
+</html>
