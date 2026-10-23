@@ -117,6 +117,23 @@ def split_overlay():
     return canvas
 
 
+def act_now_geometry():
+    btn = f"{CFG['act_now']}  ·  ENDS {CFG['offer_ends']}"
+    f_btn = font(64)
+    bw = f_btn.getbbox(btn)[2] + 110
+    return btn, f_btn, ((W - bw) // 2, 985, bw, 140)
+
+
+def act_now_pulse():
+    """Bright ring around the ACT NOW button; blinked on the end card."""
+    _, _, (bx, by, bw, bh) = act_now_geometry()
+    ring = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).rounded_rectangle([bx - 18, by - 18, bx + bw + 18, by + bh + 18], 88,
+                                           outline=(255, 255, 255, 255), width=10)
+    glow = ring.filter(ImageFilter.GaussianBlur(10))
+    return Image.alpha_composite(glow, ring)
+
+
 def end_card(bg_path, out_path):
     """Offer card over a blurred, darkened copy of the AFTER image."""
     c = CFG["colors"]
@@ -125,8 +142,9 @@ def end_card(bg_path, out_path):
         else bg.resize((int(bg.width * H / bg.height), H)).crop((0, 0, W, H))
     bg = bg.filter(ImageFilter.GaussianBlur(18))
     card = Image.alpha_composite(bg.convert("RGBA"), Image.new("RGBA", (W, H), (10, 35, 66, 205)))
-    logo = Image.open(ROOT / "brand/logo-1000.png").convert("RGBA").resize((420, 420), Image.LANCZOS)
-    card.alpha_composite(logo, ((W - 420) // 2, 170))
+    # Layout keeps everything above ~1580px: TikTok/Reels UI covers the bottom of the frame.
+    logo = Image.open(ROOT / "brand/logo-1000.png").convert("RGBA").resize((300, 300), Image.LANCZOS)
+    card.alpha_composite(logo, ((W - 300) // 2, 100))
     d = ImageDraw.Draw(card)
 
     def center(text, y, size, fill, black=True):
@@ -134,19 +152,37 @@ def end_card(bg_path, out_path):
         tw = f.getbbox(text)[2]
         d.text(((W - tw) // 2, y), text, font=f, fill=fill)
 
-    center(CFG["offer_title"], 650, 96, c["yellow"])
+    center(CFG["offer_title"], 420, 92, c["yellow"])
     for i, (price, label) in enumerate(((CFG["offer_house"], "PER HOUSE"), (CFG["offer_driveway"], "PER DRIVEWAY"))):
-        y = 800 + i * 270
-        d.rounded_rectangle([110, y, W - 110, y + 230], 36, fill=c["white"])
-        f_price, f_label = font(150), font(52, black=False)
+        y = 550 + i * 210
+        d.rounded_rectangle([110, y, W - 110, y + 185], 34, fill=c["white"])
+        f_price, f_label = font(130), font(50, black=False)
         pw = f_price.getbbox(price)[2]
         lw = f_label.getbbox(label)[2]
         x0 = (W - (pw + 30 + lw)) // 2
-        d.text((x0, y + 18), price, font=f_price, fill=c["navy"])
-        d.text((x0 + pw + 30, y + 95), label, font=f_label, fill=c["navy"])
-    center("CALL OR TEXT", 1390, 60, c["aqua"], black=False)
-    center(CFG["phone"], 1470, 120, c["white"])
-    center(CFG["service_area"].upper(), 1640, 50, c["white"], black=False)
+        d.text((x0, y + 12), price, font=f_price, fill=c["navy"])
+        d.text((x0 + pw + 30, y + 74), label, font=f_label, fill=c["navy"])
+
+    # ACT NOW button
+    btn, f_btn, (bx, by, bw, bh) = act_now_geometry()
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).rounded_rectangle([bx - 14, by - 14, bx + bw + 14, by + bh + 14], 84, fill=(255, 199, 44, 150))
+    card = Image.alpha_composite(card, glow.filter(ImageFilter.GaussianBlur(16)))
+    d = ImageDraw.Draw(card)
+    d.rounded_rectangle([bx, by, bx + bw, by + bh], 70, fill=c["yellow"], outline=c["white"], width=5)
+    d.text((bx + 55, by + 32), btn, font=f_btn, fill=c["navy"])
+
+    center("CALL OR TEXT", 1170, 54, c["aqua"], black=False)
+    center(CFG["phone"], 1235, 118, c["white"])
+    center(CFG["email"], 1385, 48, c["white"], black=False)
+    # wrap the town list to the frame width
+    f_town, lines = font(34, black=False), [[]]
+    for town in [t.upper() for t in CFG["service_area_list"][:-1]] + [CFG["service_area_list"][-1].upper() + ", FL"]:
+        if lines[-1] and f_town.getbbox("  ·  ".join(lines[-1] + [town]))[2] > W - 140:
+            lines.append([])
+        lines[-1].append(town)
+    for i, line in enumerate(lines):
+        center("  ·  ".join(line), 1462 + i * 46, 34, c["aqua"], black=False)
     card.convert("RGB").save(out_path, quality=95)
 
 
@@ -219,7 +255,7 @@ def sentence_end(gen, fallback):
 def render(day):
     v = next(x for x in SCRIPTS["videos"] if x["day"] == day)
     gen = day_dir(day)
-    out = ROOT / f"output/videos/day{day:02d}.mp4"
+    out = ROOT / f"output/videos/video{day:02d}.mp4"
     tmp = Path(tempfile.mkdtemp(prefix=f"d{day:02d}_"))
     try:
         vo, cta = gen / "vo.wav", ROOT / "assets/gen/cta.wav"
@@ -236,7 +272,8 @@ def render(day):
         if v.get("montage"):
             clips, t = build_montage(day, tmp, body_t)
             hook_end = min(2.6, body_t)
-            last_after = day_dir(t)/"after.jpg"
+            last_after = day_dir(t) / "after.jpg"
+            overlay(ai_label(), 0, body_t + gap, "ailabel")
         else:
             before, after = gen / "before.jpg", gen / "after.jpg"
             hook_end = min(max(2.2, sentence_end(gen, 2.5) + 0.15), body_t * 0.3)
@@ -268,17 +305,22 @@ def render(day):
 
         overlay(place(text_block(v["hook_caption"], 104), H * 0.30), 0.05, hook_end, "hook")
 
+        pulse = tmp / "ov_pulse.png"
+        act_now_pulse().save(pulse)
+        overlays.append((pulse, body_t + 0.6, total, "lt(mod(t,0.8),0.4)"))
+
         end_png = tmp / "end.jpg"
         end_card(last_after, end_png)
         clips.append(tmp / "s5.mp4")
-        still_clip(end_png, clips[-1], total - body_t, 1.0, 1.04)
+        still_clip(end_png, clips[-1], total - body_t, 1.0, 1.0)  # static so the button pulse stays aligned
         concat(clips, tmp / "base.mp4")
 
         # overlays
         inputs, chain, last = ["-i", str(tmp / "base.mp4")], [], "0:v"
-        for i, (png, a, b) in enumerate(overlays, start=1):
+        for i, (png, a, b, *blink) in enumerate(overlays, start=1):
             inputs += ["-i", str(png)]
-            chain.append(f"[{last}][{i}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'[v{i}]")
+            cond = f"between(t,{a:.3f},{b:.3f})" + (f"*{blink[0]}" if blink else "")
+            chain.append(f"[{last}][{i}:v]overlay=0:0:enable='{cond}'[v{i}]")
             last = f"v{i}"
         # audio: VO body, CTA, music bed, sfx
         music = ROOT / "assets/music" / MUSIC[day % len(MUSIC)]

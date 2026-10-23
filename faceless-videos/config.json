@@ -1,7 +1,7 @@
 {
   "business": "NSB Handyman",
-  "phone": "(000) 000-0000",
-  "service_area": "YOUR CITY",
+  "phone": "(386) 338-8468",
+  "service_area": "Ormond Beach to Edgewater, FL",
   "offer_title": "FALL SPECIAL",
   "offer_house": "$99",
   "offer_driveway": "$79",
@@ -14,5 +14,18 @@
   },
   "font_black": "/usr/share/fonts/opentype/inter/Inter-Black.otf",
   "font_bold": "/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf",
-  "ai_label": "AI illustration"
+  "ai_label": "AI illustration",
+  "email": "kevin@nsbhandyman.com",
+  "service_area_list": [
+    "Ormond Beach",
+    "Daytona Beach",
+    "South Daytona",
+    "Daytona Beach Shores",
+    "Port Orange",
+    "New Smyrna",
+    "Edgewater"
+  ],
+  "offer_ends": "NOV 30",
+  "offer_ends_long": "November 30",
+  "act_now": "ACT NOW"
 }

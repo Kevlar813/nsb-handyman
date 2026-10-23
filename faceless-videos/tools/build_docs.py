@@ -6,13 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "config.json").read_text())
 DATA = json.loads((ROOT / "content/scripts.json").read_text())
-START = dt.date.fromisoformat(CFG.get("start_date", "2026-10-24"))
 # Short-form reach peaks around lunch and early evening; alternate to test both.
 TIMES = ["12:00 PM", "6:30 PM"]
 
 
-def date_of(day):
-    return START + dt.timedelta(days=day - 1)
+def date_of(v):
+    return dt.date.fromisoformat(v["date"])
 
 
 def words(text):
@@ -20,44 +19,54 @@ def words(text):
 
 
 def calendar():
-    rows = ["# 30-Day Content Calendar: Fall Pressure Washing",
+    n = len(DATA["videos"])
+    towns = ", ".join(CFG["service_area_list"])
+    rows = [f"# {n}-Video Content Calendar: Fall Pressure Washing Special",
             "",
             f"**Offer on every video:** {CFG['offer_title'].title()}: {CFG['offer_house']} per house, "
-            f"{CFG['offer_driveway']} per driveway. Call or text {CFG['phone']}.",
+            f"{CFG['offer_driveway']} per driveway. **Ends {CFG['offer_ends_long']}.** "
+            f"Call or text {CFG['phone']} · {CFG['email']}",
+            "",
+            f"**Service area:** {towns}, FL",
             "",
             "**Post each video to:** YouTube Shorts, TikTok, Instagram Reels and Facebook Reels "
-            "(same file and caption on all four). Pin the comment: *\"Fall special: "
-            f"{CFG['offer_house']} house / {CFG['offer_driveway']} driveway. Call or text {CFG['phone']}\"*.",
+            "(same file and caption on all four), plus your Facebook page and local Facebook groups where "
+            "business posts are allowed. Pin the comment from `brand/bios.md`.",
             "",
-            "| Day | Date | Post time | Pillar | Surface | Title | Hook (first 2 seconds) |",
+            "| # | Post date | Time | Pillar | Title | Hook (first 2 seconds) | Files |",
             "|---:|---|---|---|---|---|---|"]
     for v in DATA["videos"]:
-        d = date_of(v["day"])
-        rows.append(f"| {v['day']} | {d:%a %b %d} | {TIMES[v['day'] % 2]} | {v['pillar']} | {v['surface']} | "
-                    f"{v['title']} | \"{v['hook']}\" |")
+        rows.append(f"| {v['day']} | {date_of(v):%a %b %d} | {TIMES[v['day'] % 2]} | {v['pillar']} | {v['title']} | "
+                    f"\"{v['hook']}\" | `video{v['day']:02d}.mp4` |")
     rows += ["",
-             "## Weekly rhythm",
-             "- **Transformations** (most days): the reliable reach driver. Satisfying reveals get rewatched.",
-             "- **Mistakes / myths / honest answers** (about 2 a week): build trust and get saves and shares.",
-             "- **Seasonal + offer pushes** (Thursday to Saturday): leaf stains, holiday lights, house + driveway bundle.",
-             "- **Day 30 recap**: a montage of the month's reveals with a last call for the fall special.",
+             "## Why this order",
+             "- **Videos 1–2** open with the strongest transformations (driveway, then house) to set the channel's look.",
+             "- **Videos 3–4** are a mistake and an honest answer. They earn trust and get shared.",
+             "- **Videos 5–7** are Florida-specific: salt air, humidity-green pavers, and washing before holiday lights.",
+             "- **Videos 8–10** push the deadline: the $178 house-and-driveway bundle, a final reveal, "
+             f"then a last call two days before the special ends on {CFG['offer_ends_long']}.",
              "",
-             "## Daily 10-minute routine",
-             "1. Upload `output/videos/dayNN.mp4` with the caption and hashtags from `scripts.md`.",
-             "2. Set the cover to `output/thumbnails/dayNN_cover.png` (YouTube: `dayNN_yt.png`).",
+             "## Between posts (to stretch 10 videos across 5 weeks)",
+             "- Re-share each video to your Facebook and Instagram Stories two days after posting, with an **Act Now** link sticker.",
+             "- Repost the best performer (most views) in the final week. The offer card already shows the deadline.",
+             "",
+             "## Per-post routine (10 minutes)",
+             "1. Upload `output/videos/videoNN.mp4` with the caption and hashtags from `scripts.md`.",
+             "2. Set the cover to `output/thumbnails/videoNN_cover.png` (YouTube: `videoNN_yt.png`).",
              "3. Pin the offer comment. Reply to every comment within the first hour.",
              "4. Log calls and texts that came from each video (\"How did you hear about us?\")."]
     return "\n".join(rows) + "\n"
 
 
 def script_book():
-    out = ["# Video Scripts: 30 Faceless Pressure-Washing Shorts", "",
-           "Each video runs: **hook → before → process → wipe reveal → split before/after → offer card**.",
+    out = [f"# Video Scripts: {len(DATA['videos'])} Faceless Pressure-Washing Shorts", "",
+           "Each video runs: **hook → before → process → wipe reveal → split before/after → offer card "
+           f"with a blinking ACT NOW · ENDS {CFG['offer_ends']} button**.",
            f"Every video ends with the same CTA voiceover: *\"{DATA['cta_vo']}\"*", ""]
     for v in DATA["videos"]:
-        d = date_of(v["day"])
-        out += [f"## Day {v['day']}: {v['title']}",
-                f"*{d:%A, %B %d} · {v['pillar']} · {v['surface']} · ~{words(v['body']) + words(DATA['cta_vo'])} words*",
+        out += [f"## Video {v['day']}: {v['title']}",
+                f"*Post {date_of(v):%A, %B %d} · {v['pillar']} · {v['surface']} · "
+                f"~{words(v['body']) + words(DATA['cta_vo'])} words*",
                 "",
                 f"**Hook:** {v['hook']}",
                 "",
@@ -65,67 +74,85 @@ def script_book():
                 "",
                 f"**On-screen captions:** {v['hook_caption'].replace(chr(10), ' ')}"
                 + (f" → {' → '.join(v['steps'])}" if v.get("steps") else "")
-                + (" → BEFORE / AFTER → offer card" if not v.get("montage") else " → rapid before/after montage → offer card"),
+                + (" → BEFORE / AFTER → offer card + ACT NOW" if not v.get("montage")
+                   else " → rapid before/after montage → offer card + ACT NOW"),
                 "",
                 f"**Thumbnail text:** {v['thumb_text'].replace(chr(10), ' ')}",
                 "",
-                f"**Post caption:** {v['post_caption']} {CFG['phone']}",
+                f"**Post caption:** {v['post_caption']} Call or text {CFG['phone']} · {CFG['email']}",
                 "",
-                f"**Hashtags:** {' '.join(v['hashtags'])} #{CFG['service_area'].replace(' ', '').lower()}",
+                f"**Hashtags:** {' '.join(v['hashtags'])} #pressurewashingflorida #volusiacounty",
                 ""]
     return "\n".join(out)
 
 
 def bios():
-    p, area = CFG["phone"], CFG["service_area"]
-    h, dw = CFG["offer_house"], CFG["offer_driveway"]
-    return f"""# Channel Bios & Lead Call-to-Action
+    p, e, short = CFG["phone"], CFG["email"], CFG["service_area"]
+    h, dw, end, end_long = CFG["offer_house"], CFG["offer_driveway"], CFG["offer_ends"], CFG["offer_ends_long"]
+    towns = ", ".join(CFG["service_area_list"])
+    tel = "".join(ch for ch in p if ch.isdigit())
+    return f"""# Channel Bios, Act Now Button & Lead Call-to-Action
 
 Use the same name, logo (`brand/logo-1000.png`) and handle everywhere. Suggested handle: **@NSBHandyman**
 (fallback: @NSBPressureWashing).
 
+**Service area:** {towns}, Florida.
+
 ## TikTok (80 characters max)
 ```
-Pressure washing in {area} 💦 Fall: {h}/house {dw}/driveway. Text {p}
+Ormond Bch–Edgewater FL 💦 {h} house {dw} drive · Ends {end} · {p}
 ```
 
 ## Instagram (150 characters max)
 ```
-💦 Pressure & soft washing | {area}
-🍂 FALL SPECIAL: {h} house · {dw} driveway
-📲 Call/text {p}
-👇 Book your spot
+💦 Pressure & soft washing · Ormond Beach to Edgewater FL
+🍂 {h} house · {dw} driveway. Ends {end}!
+📲 {p}
+👇 ACT NOW
 ```
 
 ## YouTube channel description
 ```
-NSB Handyman: pressure washing and soft washing in {area}.
+NSB Handyman: pressure washing and soft washing across {towns}, Florida.
 
-Driveways, house siding, walkways, patios and brick, start to finish, before and after.
+Driveways, houses, pavers and walkways, start to finish, before and after.
 No fluff. Just clean.
 
-🍂 FALL SPECIAL
+🍂 FALL SPECIAL: ENDS {end_long.upper()}
 • {h} per house wash
 • {dw} per driveway
 
-📲 Call or text {p} to book.
-New transformation every day.
+👉 ACT NOW: call or text {p}
+✉️ {e}
+New transformation every few days.
 ```
 
 ## Facebook page "About"
 ```
-NSB Handyman: professional pressure washing and soft washing in {area}. Houses, driveways, walkways and patios.
-FALL SPECIAL: {h} per house, {dw} per driveway. Call or text {p}. Fast quotes, honest answers, clean results.
+NSB Handyman: professional pressure washing and soft washing in {towns}, FL.
+FALL SPECIAL: {h} per house, {dw} per driveway. Ends {end_long}. Act now: call or text {p} or email {e}.
 ```
 
 ## Pinned comment (every video)
 ```
-🍂 Fall special: {h} per house, {dw} per driveway. Call or text {p} to book. Spots fill fast.
+🍂 Fall special ends {end_long}: {h} per house, {dw} per driveway. ACT NOW: call or text {p} · {e}
+Serving {towns}.
 ```
 
-## Link-in-bio button labels
-- "Book Fall Special ({h} House / {dw} Driveway)"
-- "Text Us for a Quote"
+## "Act Now" button setup (do this on every platform)
+| Platform | Where | Button label | Action |
+|---|---|---|---|
+| Facebook Page | Edit **Add Button** | **Call Now** (or **Send Message**) | `{p}` |
+| Instagram (business profile) | Edit profile → **Contact options / Action buttons** | **Call** + **Email** | `{p}`, `{e}` |
+| Instagram & Facebook Stories | **Link sticker** | `ACT NOW: ENDS {end}` | `tel:+1{tel}` or your booking link |
+| TikTok (business account) | Edit profile → **Contact** / website link | `ACT NOW: {h} House / {dw} Driveway` | phone, email or booking link |
+| YouTube | Channel → Customization → **Links** | `ACT NOW: Fall Special (Ends {end})` | booking link or `mailto:{e}` |
+| Google Business Profile | **Offer post** | **Call now** | `{h} house / {dw} driveway, ends {end_long}` |
+
+Link labels for a link-in-bio page:
+- **ACT NOW: {h} House / {dw} Driveway (Ends {end})** → `tel:+1{tel}`
+- **Text Us for a Quote** → `sms:+1{tel}`
+- **Email Us** → `mailto:{e}`
 """
 
 

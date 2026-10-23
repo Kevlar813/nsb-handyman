@@ -5,7 +5,7 @@
     {{BEFORE}} {{AFTER}}  image paths/URLs
     {{TEXT}}              2 short lines, use <br>
     {{W}} {{H}}           1280x720 (YouTube) or 1080x1920 (Shorts/TikTok/Reels cover)
-    {{LOGO}} {{HOUSE}} {{DRIVEWAY}}
+    {{LOGO}} {{HOUSE}} {{DRIVEWAY}} {{ENDS}} {{ACT}}
 -->
 <html>
 <head>
@@ -31,16 +31,21 @@
            border-radius:.35em; box-shadow:0 .1em .3em rgba(0,0,0,.45); line-height:1.05; padding:.3em .55em; }
   .price small { display:block; font-family:InterXB; font-size:.42em; letter-spacing:.08em; }
 
+  .act { position:absolute; background:#E63946; color:#fff; font-family:InterBlack; border-radius:999px;
+         padding:.28em .9em; border:.08em solid #fff; box-shadow:0 .1em .35em rgba(0,0,0,.5); letter-spacing:.03em; }
+
   /* landscape 1280x720 */
   .land { font-size:44px; }
   .land .headline { bottom:7%; font-size:118px; }
   .land .logo { width:150px; left:24px; bottom:24px; }
   .land .price { right:26px; bottom:30px; font-size:42px; transform:rotate(-4deg); }
+  .land .act { right:40px; top:124px; font-size:40px; }
   /* portrait 1080x1920 */
   .port { font-size:64px; }
   .port .headline { top:37%; font-size:170px; }
   .port .logo { width:260px; left:50%; transform:translateX(-50%); bottom:120px; }
   .port .price { right:40px; top:14%; font-size:64px; transform:rotate(-5deg); }
+  .port .act { left:50%; transform:translateX(-50%); bottom:420px; font-size:66px; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -52,7 +57,8 @@
     <div class="label a">AFTER</div>
     <div class="headline">{{TEXT}}</div>
     <img class="logo" src="{{LOGO}}">
-    <div class="price">{{HOUSE}} HOUSE<br>{{DRIVEWAY}} DRIVEWAY<small>FALL SPECIAL</small></div>
+    <div class="price">{{HOUSE}} HOUSE<br>{{DRIVEWAY}} DRIVEWAY<small>FALL SPECIAL · ENDS {{ENDS}}</small></div>
+    <div class="act">{{ACT}} ▶</div>
   </div>
 </body>
 </html>

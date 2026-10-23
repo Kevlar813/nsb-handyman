@@ -41,10 +41,11 @@ def render(v):
                 .replace("{{BEFORE}}", pair[0].as_uri()).replace("{{AFTER}}", pair[1].as_uri())
                 .replace("{{TEXT}}", v["thumb_text"].replace("\n", "<br>"))
                 .replace("{{LOGO}}", (ROOT / "brand/logo-1000.png").as_uri())
-                .replace("{{HOUSE}}", CFG["offer_house"]).replace("{{DRIVEWAY}}", CFG["offer_driveway"]))
+                .replace("{{HOUSE}}", CFG["offer_house"]).replace("{{DRIVEWAY}}", CFG["offer_driveway"])
+                .replace("{{ENDS}}", CFG["offer_ends"]).replace("{{ACT}}", CFG["act_now"]))
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
             f.write(html)
-        out = out_dir / f"day{v['day']:02d}_{key}.png"
+        out = out_dir / f"video{v['day']:02d}_{key}.png"
         subprocess.run(["node", str(ROOT / "tools/render_html.js"), f.name, str(out), str(w), str(h)],
                        check=True, env=NODE_ENV)
         os.unlink(f.name)
