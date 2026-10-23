@@ -37,40 +37,171 @@
           13.909,
           15.104,
           16.347
-        ]
+        ],
+        "hookEnd": 2.206
       }
     },
     "02": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/8399cb7a-ea6c-422d-8739-f0c5a434315b.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/14a38409-6f28-4dcd-8881-70c3968fd26c.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/14a38409-6f28-4dcd-8881-70c3968fd26c.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/7d2d49bb-3473-423b-bb37-5115734dc0c0.wav",
+        "durationSeconds": 13.65,
+        "sentenceEnds": [
+          1.138,
+          2.067,
+          5.213,
+          7.012,
+          7.952,
+          9.601,
+          10.391,
+          11.656,
+          12.689,
+          13.653
+        ],
+        "hookEnd": 2.067
+      }
     },
     "03": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/318e7ca6-1ba4-4d00-b78b-71aa2a59c4a5.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/590bc125-2f86-4b78-9e0a-c7716dace31c.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/590bc125-2f86-4b78-9e0a-c7716dace31c.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/73a6e0cb-68a2-43d3-8da8-f4a7fb944438.wav",
+        "durationSeconds": 13.98,
+        "sentenceEnds": [
+          2.67,
+          6.49,
+          8.336,
+          9.265,
+          10.333,
+          11.169,
+          11.901,
+          13.979
+        ],
+        "hookEnd": 2.67
+      }
     },
     "04": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/6b1073a6-11ae-4cc6-8e8c-ad623a05752a.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/6d733056-5c5a-4ee5-ac58-f3f3a207f144.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/6d733056-5c5a-4ee5-ac58-f3f3a207f144.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/287298dc-381b-4492-a88d-5a7eb7f20f93.wav",
+        "durationSeconds": 15.05,
+        "sentenceEnds": [
+          1.556,
+          2.844,
+          5.573,
+          10.054,
+          12.991,
+          15.046
+        ],
+        "hookEnd": 2.844
+      }
     },
     "05": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/5498178f-cb39-493f-a8bf-39b747a53038.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/ccec313b-529b-448e-8cd1-cbe0c3ee5f72.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/ccec313b-529b-448e-8cd1-cbe0c3ee5f72.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/d11b5e4c-18f2-4e87-94a9-7503c9c19edc.wav",
+        "durationSeconds": 13.65,
+        "sentenceEnds": [
+          1.358,
+          2.461,
+          6.327,
+          9.137,
+          10.101,
+          11.274,
+          13.654
+        ],
+        "hookEnd": 2.461
+      }
     },
     "06": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/4b81d5fb-2a3e-4be1-8486-26289d260693.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/336f6370-a859-4a12-91bb-6b17e959afc1.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/336f6370-a859-4a12-91bb-6b17e959afc1.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/2d1e7a11-1d6f-4d3a-8460-686fd556fb92.wav",
+        "durationSeconds": 14.77,
+        "sentenceEnds": [
+          2.554,
+          6.42,
+          9.531,
+          10.611,
+          11.888,
+          13.293,
+          14.767
+        ],
+        "hookEnd": 2.554
+      }
     },
     "07": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/c747f4a4-8f77-4c73-a99d-cc3087296da9.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/a59d0904-99ce-4931-826c-90ee3704f960.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/a59d0904-99ce-4931-826c-90ee3704f960.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/29b2f34d-7cb9-4b85-8a04-22e696a93f7d.wav",
+        "durationSeconds": 13.28,
+        "sentenceEnds": [
+          2.299,
+          6.304,
+          7.941,
+          9.508,
+          13.282
+        ],
+        "hookEnd": 2.299
+      }
     },
     "08": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/feaa24a2-7f30-4c94-9541-30bc6e6d1fb6.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/ef92d860-cc30-4fda-b159-ce288f429b0c.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/ef92d860-cc30-4fda-b159-ce288f429b0c.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/fc7edc1a-4b60-46be-9985-2909b21d372c.wav",
+        "durationSeconds": 14.07,
+        "sentenceEnds": [
+          1.196,
+          2.055,
+          2.566,
+          7.976,
+          11.169,
+          14.072
+        ],
+        "hookEnd": 2.566
+      }
     },
     "09": {
       "before": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/810d5455-0bf1-452a-87cb-881814da262d.jpg",
-      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/5806f389-1fde-4983-8346-3655edf09390.jpg"
+      "after": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/generated/5806f389-1fde-4983-8346-3655edf09390.jpg",
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/ff0853c7-7015-420a-acd7-c33f22f1a4db.wav",
+        "durationSeconds": 12.63,
+        "sentenceEnds": [
+          1.765,
+          4.203,
+          5.213,
+          6.699,
+          7.605,
+          9.079,
+          10.798,
+          12.632
+        ],
+        "hookEnd": 1.765
+      }
+    },
+    "10": {
+      "vo": {
+        "url": "https://media.viewmax.io/users/cWUvlvxOI1nWnQgRs4eVWnZuXMRwv7bi/voiceover/9fed3bb4-932c-469d-bc76-c0f4d1d8d1bb.wav",
+        "durationSeconds": 10.68,
+        "sentenceEnds": [
+          0.778,
+          2.891,
+          3.518,
+          3.936,
+          4.412,
+          6.641,
+          8.696,
+          10.681
+        ],
+        "hookEnd": 2.891
+      }
     }
   }
 }
