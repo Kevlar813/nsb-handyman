@@ -246,7 +246,10 @@ def day_dir(day):
 def sentence_end(gen, fallback):
     meta = gen / "vo.json"
     if meta.exists():
-        ends = json.loads(meta.read_text()).get("sentenceEnds") or []
+        data = json.loads(meta.read_text())
+        if data.get("hookEnd"):
+            return float(data["hookEnd"])
+        ends = data.get("sentenceEnds") or []
         if ends:
             return float(ends[0])
     return fallback
