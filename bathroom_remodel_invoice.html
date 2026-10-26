@@ -209,7 +209,19 @@
             .invoice-container {
                 box-shadow: none;
                 max-width: 100%;
+                padding: 0;
             }
+            .header { margin-bottom: 20px; }
+            table { margin-bottom: 16px; }
+            table th, table td { padding: 5px 8px; font-size: 12px; }
+            table td:nth-child(2), table td:nth-child(3) { white-space: nowrap; }
+            thead { display: table-header-group; }
+            tr, .summary, .notes, .payment-box { break-inside: avoid; }
+            .summary { gap: 16px; margin-bottom: 16px; }
+            .summary-box, .notes { padding: 12px; }
+            .notes { margin-bottom: 12px; }
+            .payment-box { margin-bottom: 16px !important; padding: 12px !important; }
+            .footer { margin-top: 12px !important; padding-top: 10px !important; }
         }
     </style>
 </head>
@@ -609,7 +621,7 @@
             <p style="font-size: 24px; font-weight: 700; color: #2c3e50;">$14,505.50</p>
         </div>
 
-        <div style="margin-bottom: 30px; padding: 20px; background-color: #f0f8ff; border: 2px solid #3498db; border-radius: 4px;">
+        <div class="payment-box" style="margin-bottom: 30px; padding: 20px; background-color: #f0f8ff; border: 2px solid #3498db; border-radius: 4px;">
             <h3 style="color: #2c3e50; margin-bottom: 20px;">PAYMENT SUMMARY & BILLING SPLIT (50/50)</h3>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
                 <div style="padding: 15px; background: white; border-radius: 4px; border: 1px solid #3498db;">
@@ -661,7 +673,7 @@
             </ul>
         </div>
 
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ecf0f1; text-align: center; color: #555; font-size: 12px;">
+        <div class="footer" style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ecf0f1; text-align: center; color: #555; font-size: 12px;">
             <p>Thank you for choosing New Smyrna Handyman for your home renovation project.</p>
             <p>For questions regarding this invoice, please contact: kevin@nsbhandyman.com</p>
         </div>
