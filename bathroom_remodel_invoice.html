@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bathroom Remodel Invoice</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .invoice-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            border-bottom: 3px solid #2c3e50;
+            padding-bottom: 20px;
+        }
+
+        .company-info h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .company-info p {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .invoice-details {
+            text-align: right;
+        }
+
+        .invoice-details h2 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .invoice-details p {
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .customer-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .project-description {
+            color: #333;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
+        table thead {
+            background-color: #2c3e50;
+            color: white;
+        }
+
+        table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #ecf0f1;
+            font-size: 14px;
+        }
+
+        table tbody tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .section-header {
+            background-color: #ecf0f1;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .subtotal-row {
+            background-color: #f9f9f9;
+            font-weight: 600;
+        }
+
+        .total-row {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .summary-box {
+            padding: 20px;
+            border: 1px solid #ecf0f1;
+            border-radius: 4px;
+        }
+
+        .summary-box h3 {
+            color: #2c3e50;
+            font-size: 13px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .summary-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .summary-line.total {
+            border-top: 2px solid #ecf0f1;
+            padding-top: 10px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .notes {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            border-left: 4px solid #27ae60;
+        }
+
+        .notes h3 {
+            color: #2c3e50;
+            font-size: 13px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .notes p {
+            color: #555;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .notes li {
+            color: #555;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-left: 20px;
+        }
+
+        .currency {
+            font-weight: 600;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .invoice-container {
+                box-shadow: none;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="header">
+            <div class="company-info">
+                <h1>New Smyrna Handyman</h1>
+                <p>Professional Home Renovation & Repair</p>
+                <p>Daytona Beach • New Smyrna Beach • Ormond Beach, FL</p>
+                <p>kevin@nsbhandyman.com</p>
+            </div>
+            <div class="invoice-details">
+                <h2>INVOICE</h2>
+                <p><strong>Invoice Date:</strong> October 26, 2026</p>
+                <p><strong>Project Type:</strong> Complete Bathroom Remodel</p>
+            </div>
+        </div>
+
+        <div class="project-description">
+            <strong>Project Scope:</strong> Complete bathroom gut and remodel including new plumbing fixtures (tub, drain, valve, toilet, vanity, sink), new waterproofed walls with Durrock, sheetrock, and comprehensive tile work. Custom features include decorative glass tile installation around impact-resistant window and two custom niches with LED backlighting. Updated electrical with new outlet, LED can lights, and LED lit exhaust fan. Paint finish, wood baseboards, door trim, and custom two-tiered wood base installation. Bathroom: 55 sq ft | Shower: 3ft × 5ft × 8ft tall
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>MR. WILL - LABOR & SERVICES</th>
+                    <th>Hours</th>
+                    <th>Rate</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="section-header">
+                    <td colspan="4">LABOR & SERVICES</td>
+                </tr>
+                <tr>
+                    <td>Demolition & Site Preparation</td>
+                    <td>20 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$1,000.00</td>
+                </tr>
+                <tr>
+                    <td>Plumbing Installation (rough-in & finish)</td>
+                    <td>14 hrs</td>
+                    <td>$65/hr</td>
+                    <td class="text-right">$910.00</td>
+                </tr>
+                <tr>
+                    <td>Hot Water Supply Line (50% share)</td>
+                    <td>Flat fee</td>
+                    <td>$250.00</td>
+                    <td class="text-right">$250.00</td>
+                </tr>
+                <tr>
+                    <td>Camera Inspection - Main Sewer Line (50% share)</td>
+                    <td>Flat fee</td>
+                    <td>$50.00</td>
+                    <td class="text-right">$50.00</td>
+                </tr>
+                <tr>
+                    <td>Electrical Work (outlets, fixtures, LED wiring, attic power source)</td>
+                    <td>12 hrs</td>
+                    <td>$60/hr</td>
+                    <td class="text-right">$720.00</td>
+                </tr>
+                <tr>
+                    <td>Framing & Drywall Installation</td>
+                    <td>6 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$330.00</td>
+                </tr>
+                <tr>
+                    <td>Waterproofing & Durrock Application</td>
+                    <td>8 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$440.00</td>
+                </tr>
+                <tr>
+                    <td>Tile Installation (shower, floor, decorative glass tile, niches)</td>
+                    <td>36 hrs</td>
+                    <td>$60/hr</td>
+                    <td class="text-right">$2,160.00</td>
+                </tr>
+                <tr>
+                    <td>Window Installation (impact-resistant, removal of old aluminum)</td>
+                    <td>3 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$165.00</td>
+                </tr>
+                <tr>
+                    <td>Interior Painting (walls, ceiling, baseboards, trim)</td>
+                    <td>6 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$300.00</td>
+                </tr>
+                <tr>
+                    <td>Baseboard & Door Trim Installation</td>
+                    <td>4 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$200.00</td>
+                </tr>
+                <tr>
+                    <td>Finishing & Final Details</td>
+                    <td>7 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$350.00</td>
+                </tr>
+                <tr class="subtotal-row">
+                    <td colspan="3" class="text-right">MR. WILL - LABOR & SERVICES SUBTOTAL:</td>
+                    <td class="text-right">$6,875.00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>MR. WILL - MATERIALS PROVIDED BY CONTRACTOR</th>
+                    <th>Quantity</th>
+                    <th>Unit Cost</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="section-header">
+                    <td colspan="4">LED LIGHTING & ELECTRICAL</td>
+                </tr>
+                <tr>
+                    <td>LED Addressable Light Strips with Control System</td>
+                    <td>0.5 set</td>
+                    <td>$150.00</td>
+                    <td class="text-right">$75.00</td>
+                </tr>
+                <tr>
+                    <td>LED Recessed Can Lights (1 unit @ $28)</td>
+                    <td>1</td>
+                    <td>$28.00</td>
+                    <td class="text-right">$28.00</td>
+                </tr>
+                <tr>
+                    <td>LED Lit Exhaust Fan</td>
+                    <td>0.5</td>
+                    <td>$120.00</td>
+                    <td class="text-right">$60.00</td>
+                </tr>
+                <tr>
+                    <td>LED Backlit Mirror</td>
+                    <td>0.5</td>
+                    <td>$110.00</td>
+                    <td class="text-right">$55.00</td>
+                </tr>
+                <tr class="section-header">
+                    <td colspan="4">WATERPROOFING & FINISH MATERIALS</td>
+                </tr>
+                <tr>
+                    <td>Durrock Waterproof Cement Board & Waterproof Membrane (Contractor-Supplied)</td>
+                    <td>33 sq ft</td>
+                    <td>$0.00</td>
+                    <td class="text-right">$0.00</td>
+                </tr>
+                <tr>
+                    <td>Interior Paint - Satin Finish</td>
+                    <td>1 gal</td>
+                    <td>$41.25</td>
+                    <td class="text-right">$41.25</td>
+                </tr>
+                <tr>
+                    <td>Interior Paint - Semi-Gloss</td>
+                    <td>1 gal</td>
+                    <td>$48.75</td>
+                    <td class="text-right">$48.75</td>
+                </tr>
+                <tr>
+                    <td>Wood Baseboards (pre-finish, per linear foot)</td>
+                    <td>20 LF</td>
+                    <td>$1.75</td>
+                    <td class="text-right">$35.00</td>
+                </tr>
+                <tr>
+                    <td>Door Trim & Casing (pre-finish, per linear foot)</td>
+                    <td>17.5 LF</td>
+                    <td>$2.00</td>
+                    <td class="text-right">$35.00</td>
+                </tr>
+                <tr class="subtotal-row">
+                    <td colspan="3" class="text-right">MR. WILL - MATERIALS SUBTOTAL:</td>
+                    <td class="text-right">$377.75</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table style="margin-top: 40px;">
+            <thead>
+                <tr>
+                    <th>OTHER PARTY - LABOR & SERVICES</th>
+                    <th>Hours</th>
+                    <th>Rate</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="section-header">
+                    <td colspan="4">LABOR & SERVICES</td>
+                </tr>
+                <tr>
+                    <td>Demolition & Site Preparation</td>
+                    <td>20 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$1,000.00</td>
+                </tr>
+                <tr>
+                    <td>Plumbing Installation (rough-in & finish)</td>
+                    <td>14 hrs</td>
+                    <td>$65/hr</td>
+                    <td class="text-right">$910.00</td>
+                </tr>
+                <tr>
+                    <td>Hot Water Supply Line (50% share)</td>
+                    <td>Flat fee</td>
+                    <td>$250.00</td>
+                    <td class="text-right">$250.00</td>
+                </tr>
+                <tr>
+                    <td>Camera Inspection - Main Sewer Line (50% share)</td>
+                    <td>Flat fee</td>
+                    <td>$50.00</td>
+                    <td class="text-right">$50.00</td>
+                </tr>
+                <tr>
+                    <td>Electrical Work (outlets, fixtures, LED wiring, attic power source)</td>
+                    <td>12 hrs</td>
+                    <td>$60/hr</td>
+                    <td class="text-right">$720.00</td>
+                </tr>
+                <tr>
+                    <td>Framing & Drywall Installation</td>
+                    <td>6 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$330.00</td>
+                </tr>
+                <tr>
+                    <td>Waterproofing & Durrock Application</td>
+                    <td>8 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$440.00</td>
+                </tr>
+                <tr>
+                    <td>Tile Installation (shower, floor, decorative glass tile, niches)</td>
+                    <td>36 hrs</td>
+                    <td>$60/hr</td>
+                    <td class="text-right">$2,160.00</td>
+                </tr>
+                <tr>
+                    <td>Window Installation (impact-resistant, removal of old aluminum)</td>
+                    <td>3 hrs</td>
+                    <td>$55/hr</td>
+                    <td class="text-right">$165.00</td>
+                </tr>
+                <tr>
+                    <td>Interior Painting (walls, ceiling, baseboards, trim)</td>
+                    <td>6 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$300.00</td>
+                </tr>
+                <tr>
+                    <td>Baseboard & Door Trim Installation</td>
+                    <td>4 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$200.00</td>
+                </tr>
+                <tr>
+                    <td>Finishing & Final Details</td>
+                    <td>7 hrs</td>
+                    <td>$50/hr</td>
+                    <td class="text-right">$350.00</td>
+                </tr>
+                <tr class="subtotal-row">
+                    <td colspan="3" class="text-right">OTHER PARTY - LABOR & SERVICES SUBTOTAL:</td>
+                    <td class="text-right">$6,875.00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table style="margin-top: 30px;">
+            <thead>
+                <tr>
+                    <th>OTHER PARTY - MATERIALS PROVIDED BY CONTRACTOR</th>
+                    <th>Quantity</th>
+                    <th>Unit Cost</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="section-header">
+                    <td colspan="4">MATERIALS</td>
+                </tr>
+                <tr>
+                    <td>LED Addressable Light Strips with Control System</td>
+                    <td>0.5 set</td>
+                    <td>$150.00</td>
+                    <td class="text-right">$75.00</td>
+                </tr>
+                <tr>
+                    <td>LED Recessed Can Lights (1 unit @ $28)</td>
+                    <td>1</td>
+                    <td>$28.00</td>
+                    <td class="text-right">$28.00</td>
+                </tr>
+                <tr>
+                    <td>LED Lit Exhaust Fan</td>
+                    <td>0.5</td>
+                    <td>$120.00</td>
+                    <td class="text-right">$60.00</td>
+                </tr>
+                <tr>
+                    <td>LED Backlit Mirror</td>
+                    <td>0.5</td>
+                    <td>$110.00</td>
+                    <td class="text-right">$55.00</td>
+                </tr>
+                <tr class="section-header">
+                    <td colspan="4">WATERPROOFING & FINISH MATERIALS</td>
+                </tr>
+                <tr>
+                    <td>Durrock Waterproof Cement Board & Waterproof Membrane (Contractor-Supplied)</td>
+                    <td>33 sq ft</td>
+                    <td>$0.00</td>
+                    <td class="text-right">$0.00</td>
+                </tr>
+                <tr>
+                    <td>Interior Paint - Satin Finish</td>
+                    <td>1 gal</td>
+                    <td>$41.25</td>
+                    <td class="text-right">$41.25</td>
+                </tr>
+                <tr>
+                    <td>Interior Paint - Semi-Gloss</td>
+                    <td>1 gal</td>
+                    <td>$48.75</td>
+                    <td class="text-right">$48.75</td>
+                </tr>
+                <tr>
+                    <td>Wood Baseboards (pre-finish, per linear foot)</td>
+                    <td>20 LF</td>
+                    <td>$1.75</td>
+                    <td class="text-right">$35.00</td>
+                </tr>
+                <tr>
+                    <td>Door Trim & Casing (pre-finish, per linear foot)</td>
+                    <td>17.5 LF</td>
+                    <td>$2.00</td>
+                    <td class="text-right">$35.00</td>
+                </tr>
+                <tr class="subtotal-row">
+                    <td colspan="3" class="text-right">OTHER PARTY - MATERIALS SUBTOTAL:</td>
+                    <td class="text-right">$377.75</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="summary">
+            <div class="summary-box">
+                <h3>MR. WILL - COST SUMMARY</h3>
+                <div class="summary-line">
+                    <span>Labor & Services:</span>
+                    <span class="currency">$6,875.00</span>
+                </div>
+                <div class="summary-line">
+                    <span>Materials:</span>
+                    <span class="currency">$377.75</span>
+                </div>
+                <div class="summary-line total">
+                    <span>MR. WILL TOTAL:</span>
+                    <span class="currency">$7,252.75</span>
+                </div>
+            </div>
+            <div class="summary-box">
+                <h3>OTHER PARTY - COST SUMMARY</h3>
+                <div class="summary-line">
+                    <span>Labor & Services:</span>
+                    <span class="currency">$6,875.00</span>
+                </div>
+                <div class="summary-line">
+                    <span>Materials:</span>
+                    <span class="currency">$377.75</span>
+                </div>
+                <div class="summary-line total">
+                    <span>OTHER PARTY TOTAL:</span>
+                    <span class="currency">$7,252.75</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; padding: 20px; background-color: #ecf0f1; border-radius: 4px; text-align: center;">
+            <h3 style="color: #2c3e50; margin-bottom: 10px;">COMBINED PROJECT TOTAL</h3>
+            <p style="font-size: 24px; font-weight: 700; color: #2c3e50;">$14,505.50</p>
+        </div>
+
+        <div style="margin-bottom: 30px; padding: 20px; background-color: #f0f8ff; border: 2px solid #3498db; border-radius: 4px;">
+            <h3 style="color: #2c3e50; margin-bottom: 20px;">PAYMENT SUMMARY & BILLING SPLIT (50/50)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                <div style="padding: 15px; background: white; border-radius: 4px; border: 1px solid #3498db;">
+                    <h4 style="color: #2c3e50; margin-bottom: 15px; text-align: center;">Mr. Will</h4>
+                    <div style="font-size: 13px; line-height: 1.8;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Amount Due:</span>
+                            <span style="font-weight: 600;">$7,252.75</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Amount Paid:</span>
+                            <span style="font-weight: 600; color: #27ae60;">$2,500.00</span>
+                        </div>
+                        <div style="border-top: 2px solid #ecf0f1; padding-top: 8px; display: flex; justify-content: space-between;">
+                            <span>Balance Due:</span>
+                            <span style="font-weight: 700; color: #e74c3c;">$4,752.75</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 15px; background: white; border-radius: 4px; border: 1px solid #3498db;">
+                    <h4 style="color: #2c3e50; margin-bottom: 15px; text-align: center;">Other Party</h4>
+                    <div style="font-size: 13px; line-height: 1.8;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Amount Due:</span>
+                            <span style="font-weight: 600;">$7,252.75</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Amount Paid:</span>
+                            <span style="font-weight: 600; color: #27ae60;">$0.00</span>
+                        </div>
+                        <div style="border-top: 2px solid #ecf0f1; padding-top: 8px; display: flex; justify-content: space-between;">
+                            <span>Balance Due:</span>
+                            <span style="font-weight: 700; color: #e74c3c;">$7,252.75</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="notes">
+            <h3>PROJECT NOTES</h3>
+            <ul>
+                <li><strong>Homeowner-Supplied Materials (Not Included in Invoice):</strong> Fixtures (tub, toilet, vanity, sink, drain, valve, shutoff valves, supply lines), sheetrock, tile (12×24 and decorative glass tile), marble sills, and impact-resistant window. Labor only charged for installation of homeowner-supplied items.</li>
+                <li><strong>Contractor-Supplied Materials:</strong> Durrock waterproofing and waterproof membrane supplied for tub surround (36" × 8' × 36" × 8' × 60" × 8' dimensions). Two-tiered wood base fabricated on-site.</li>
+                <li><strong>LED Integration:</strong> All LED lights (can lights, exhaust fan, backlit mirror, addressable strips) are wired to synchronized control system with separate attic power source for clean installation.</li>
+                <li><strong>Premium Finishes:</strong> Satin finish on walls provides modern washable surface suitable for bathrooms; semi-gloss on ceiling and trim provides moisture resistance and easy cleaning.</li>
+                <li><strong>Custom Features:</strong> Decorative glass tile installation around window with integrated LED backlighting; two 12×12 niches with custom LED lighting and marble sills represent premium custom work.</li>
+                <li><strong>Scope Complete:</strong> This represents a full bathroom transformation from demolition through final finishing. All work performed to Florida building code standards.</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ecf0f1; text-align: center; color: #555; font-size: 12px;">
+            <p>Thank you for choosing New Smyrna Handyman for your home renovation project.</p>
+            <p>For questions regarding this invoice, please contact: kevin@nsbhandyman.com</p>
+        </div>
+    </div>
+</body>
+</html>
